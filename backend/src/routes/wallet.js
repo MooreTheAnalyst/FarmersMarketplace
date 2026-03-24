@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
-const { getBalance, getTransactions, fundTestnetAccount } = require('../stellar');
+const { getBalance, getTransactions, fundTestnetAccount } = require('../utils/stellar');
 
 // GET /api/wallet - get balance + info
 router.get('/', auth, async (req, res) => {

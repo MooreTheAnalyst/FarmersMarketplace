@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db/schema');
-const { createWallet } = require('../stellar');
+const { createWallet } = require('../utils/stellar');
 const validate = require('../middleware/validate');
 
 // POST /api/auth/register

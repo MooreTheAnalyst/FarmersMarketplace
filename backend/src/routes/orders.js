@@ -2,8 +2,8 @@ const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { sendPayment, getBalance } = require('../stellar');
-const { sendOrderEmails } = require('../mailer');
+const { sendPayment, getBalance } = require('../utils/stellar');
+const { sendOrderEmails } = require('../utils/mailer');
 
 // POST /api/orders - buyer places + pays for an order
 router.post('/', auth, validate.order, async (req, res) => {
