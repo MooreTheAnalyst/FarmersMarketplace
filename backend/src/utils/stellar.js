@@ -1,9 +1,25 @@
 const StellarSdk = require('@stellar/stellar-sdk');
 
-const isTestnet = (process.env.STELLAR_NETWORK || 'testnet') === 'testnet';
-const server = new StellarSdk.Horizon.Server(
+const STELLAR_NETWORK = (process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
+
+if (!['testnet', 'mainnet'].includes(STELLAR_NETWORK)) {
+  throw new Error(`Invalid STELLAR_NETWORK "${STELLAR_NETWORK}". Must be "testnet" or "mainnet".`);
+}
+
+if (STELLAR_NETWORK === 'mainnet' && process.env.STELLAR_MAINNET_CONFIRMED !== 'true') {
+  throw new Error(
+    'Mainnet use requires STELLAR_MAINNET_CONFIRMED=true in your environment. ' +
+    'This guard prevents accidental real-fund transactions.'
+  );
+}
+
+const isTestnet = STELLAR_NETWORK === 'testnet';
+
+const horizonUrl = process.env.STELLAR_HORIZON_URL || (
   isTestnet ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org'
 );
+
+const server = new StellarSdk.Horizon.Server(horizonUrl);
 const networkPassphrase = isTestnet
   ? StellarSdk.Networks.TESTNET
   : StellarSdk.Networks.PUBLIC;
@@ -82,4 +98,4 @@ async function getTransactions(publicKey) {
   }
 }
 
-module.exports = { createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions };
+module.exports = { isTestnet, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions };

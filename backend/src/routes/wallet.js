@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
-const { getBalance, getTransactions, fundTestnetAccount } = require('../utils/stellar');
+const { getBalance, getTransactions, fundTestnetAccount, isTestnet } = require('../utils/stellar');
 
 // GET /api/wallet - get balance + info
 router.get('/', auth, async (req, res) => {
@@ -19,7 +19,7 @@ router.get('/transactions', auth, async (req, res) => {
 
 // POST /api/wallet/fund - testnet only, fund via Friendbot
 router.post('/fund', auth, async (req, res) => {
-  if ((process.env.STELLAR_NETWORK || 'testnet') !== 'testnet')
+  if (!isTestnet)
     return res.status(400).json({ error: 'Only available on testnet' });
 
   const user = db.prepare('SELECT stellar_public_key FROM users WHERE id = ?').get(req.user.id);
