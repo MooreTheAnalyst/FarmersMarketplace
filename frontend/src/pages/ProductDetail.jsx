@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { getStellarErrorMessage } from '../utils/stellarErrors';
 
 const s = {
   page: { maxWidth: 600, margin: '40px auto', padding: 24 },
@@ -43,7 +44,7 @@ export default function ProductDetail() {
       const res = await api.placeOrder({ product_id: product.id, quantity: qty });
       setResult(res);
     } catch (err) {
-      setError(err.message);
+      setError(getStellarErrorMessage(err));
     } finally {
       setLoading(false);
     }

@@ -25,7 +25,8 @@ const s = {
   empty: { textAlign: 'center', padding: 60, color: '#888' },
 };
 
-const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', available: 'true' };
+const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', seller: '', available: 'true' };
+const MAX_PRICE = 500;
 
 export default function Marketplace() {
   const [products, setProducts] = useState([]);
@@ -39,7 +40,8 @@ export default function Marketplace() {
       const params = {};
       if (f.category)  params.category = f.category;
       if (f.minPrice)  params.minPrice = f.minPrice;
-      if (f.maxPrice)  params.maxPrice = f.maxPrice;
+      if (f.maxPrice && f.maxPrice < MAX_PRICE) params.maxPrice = f.maxPrice;
+      if (f.seller)    params.seller = f.seller;
       if (f.available) params.available = f.available;
       setProducts(await api.getProducts(params));
     } catch {}
@@ -63,7 +65,7 @@ export default function Marketplace() {
   const visible = filters.search
     ? products.filter(p =>
         p.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        p.farmer_name.toLowerCase().includes(filters.search.toLowerCase())
+        (p.farmer_name || '').toLowerCase().includes(filters.search.toLowerCase())
       )
     : products;
 
@@ -75,7 +77,7 @@ export default function Marketplace() {
       <div style={s.filters}>
         <input
           style={s.input}
-          placeholder="Search products or farmers..."
+          placeholder="Search products..."
           value={filters.search}
           onChange={e => set('search', e.target.value)}
         />
@@ -84,10 +86,28 @@ export default function Marketplace() {
           {CATEGORIES.map(c => <option key={c} value={c === 'all' ? '' : c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
         </select>
 
+        <input
+          style={s.input}
+          placeholder="Seller name..."
+          value={filters.seller}
+          onChange={e => set('seller', e.target.value)}
+        />
+
         <div style={s.priceRow}>
-          <input style={s.priceInput} placeholder="Min XLM" type="number" min="0" value={filters.minPrice} onChange={e => set('minPrice', e.target.value)} />
-          <span style={{ color: '#aaa' }}>–</span>
-          <input style={s.priceInput} placeholder="Max XLM" type="number" min="0" value={filters.maxPrice} onChange={e => set('maxPrice', e.target.value)} />
+          <span style={{ fontSize: 13, color: '#666' }}>Price:</span>
+          <input
+            type="range" min="0" max={MAX_PRICE} step="5"
+            value={filters.minPrice || 0}
+            onChange={e => set('minPrice', e.target.value === '0' ? '' : e.target.value)}
+          />
+          <span style={{ fontSize: 13, color: '#444', minWidth: 80 }}>
+            {filters.minPrice || 0} – {filters.maxPrice || MAX_PRICE}+ XLM
+          </span>
+          <input
+            type="range" min="0" max={MAX_PRICE} step="5"
+            value={filters.maxPrice || MAX_PRICE}
+            onChange={e => set('maxPrice', e.target.value)}
+          />
         </div>
 
         <select style={s.select} value={filters.available} onChange={e => set('available', e.target.value)}>
