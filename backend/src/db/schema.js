@@ -63,6 +63,10 @@ try {
   process.exit(1);
 }
 
+// Escrow columns migration
+try { db.exec(`ALTER TABLE orders ADD COLUMN escrow_balance_id TEXT`); } catch {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN escrow_status TEXT DEFAULT 'none'`); } catch {}
+
 // Migrate existing DB: add columns if missing
 try { db.exec(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN image_url TEXT`); } catch {}
@@ -73,6 +77,9 @@ try { db.exec(`ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1`); } catch 
 try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN location TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_bonus_sent INTEGER DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
 
@@ -119,6 +126,9 @@ try {
     db.exec(`ALTER TABLE orders_new RENAME TO orders`);
   } else {
     db.exec(`DROP TABLE orders_new`);
+  }
+} catch {}
+
 // SQLite doesn't support ALTER COLUMN, so we use a safe workaround via a new table
 try {
   const info = db.prepare(`PRAGMA table_info(orders)`).all();
@@ -151,6 +161,46 @@ try {
   }
 } catch {}
 
+// Favorites table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS favorites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      buyer_id INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(buyer_id, product_id),
+      FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+  `);
+} catch (err) {
+  console.error('[DB] Failed to create favorites table:', err.message);
+}
+
+// Addresses table for buyer delivery addresses
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS addresses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      street TEXT NOT NULL,
+      city TEXT NOT NULL,
+      country TEXT NOT NULL,
+      postal_code TEXT,
+      is_default INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+} catch (err) {
+  console.error('[DB] Failed to create addresses table:', err.message);
+}
+
+// Add address_id to orders table
+try { db.exec(`ALTER TABLE orders ADD COLUMN address_id INTEGER REFERENCES addresses(id)`); } catch {}
+
 // FTS5 virtual table for full-text product search
 try {
   db.exec(`
@@ -162,7 +212,7 @@ try {
   console.error('[DB] FTS5 setup failed:', err.message);
 }
 
-// Triggers to keep FTS in sync with products
+// Tags table for product categorization\ntry {\n  db.exec(`\n    CREATE TABLE IF NOT EXISTS tags (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      name TEXT NOT NULL UNIQUE,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    );\n  `);\n} catch (err) {\n  console.error('[DB] Failed to create tags table:', err.message);\n}\n\n// Product tags join table\ntry {\n  db.exec(`\n    CREATE TABLE IF NOT EXISTS product_tags (\n      product_id INTEGER NOT NULL,\n      tag_id INTEGER NOT NULL,\n      PRIMARY KEY (product_id, tag_id),\n      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,\n      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE\n    );\n  `);\n} catch (err) {\n  console.error('[DB] Failed to create product_tags table:', err.message);\n}\n\n// Messages table for in-app messaging\ntry {\n  db.exec(`\n    CREATE TABLE IF NOT EXISTS messages (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      sender_id INTEGER NOT NULL,\n      receiver_id INTEGER NOT NULL,\n      product_id INTEGER,\n      content TEXT NOT NULL,\n      read_at DATETIME,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,\n      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,\n      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL\n    );\n  `);\n} catch (err) {\n  console.error('[DB] Failed to create messages table:', err.message);\n}\n\n// Triggers to keep FTS in sync with products
 try {
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS products_ai AFTER INSERT ON products BEGIN
@@ -179,5 +229,34 @@ try {
     END;
   `);
 } catch {}
+
+// Idempotency keys table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key        TEXT PRIMARY KEY,
+      response   TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+} catch (err) {
+  console.error('[DB] Failed to create idempotency_keys table:', err.message);
+// stock_alerts table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stock_alerts (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    INTEGER NOT NULL,
+      product_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, product_id),
+      FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+  `);
+} catch (err) {
+  console.error('[DB] Failed to create stock_alerts table:', err.message);
+}
 
 module.exports = db;

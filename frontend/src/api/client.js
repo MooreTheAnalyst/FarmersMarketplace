@@ -12,6 +12,9 @@ export function clearAccessToken() {
 }
 
 // Reads the csrf_token cookie (not HttpOnly, so JS can read it)
+export function setAccessToken(token) { accessToken = token; }
+export function clearAccessToken()    { accessToken = null; }
+
 function getCsrfToken() {
   const match = document.cookie.split(';').find(c => c.trim().startsWith('csrf_token='));
   return match ? match.trim().split('=')[1] : null;
@@ -40,6 +43,7 @@ async function refreshAccessToken() {
 }
 
 const MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const MUTATING    = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const CSRF_EXEMPT = ['/auth/login', '/auth/register'];
 
 async function request(path, options = {}, retry = true) {
@@ -51,12 +55,16 @@ async function request(path, options = {}, retry = true) {
   const csrfToken = needsCsrf ? getCsrfToken() : null;
 
   // If a FormData body is passed, let the browser set Content-Type (multipart boundary)
+  if (needsCsrf) await ensureCsrfToken();
+
+  const csrfToken  = needsCsrf ? getCsrfToken() : null;
   const isFormData = options.body instanceof FormData;
 
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  if (csrfToken)   headers['X-CSRF-Token']  = csrfToken;
   Object.assign(headers, options.headers || {});
 
   const res = await fetch(`${BASE}${path}`, {
@@ -89,120 +97,6 @@ async function request(path, options = {}, retry = true) {
   return data;
 }
 
-export const api = {
-  register: (body) => request('/auth/register', { method: 'POST', body }),
-  login: (body) => request('/auth/login', { method: 'POST', body }),
-  logout: () => request('/auth/logout', { method: 'POST' }),
-  refresh: () => refreshAccessToken(),
-
-  getProducts: (filters = {}) => {
-    const entries = Object.entries(filters).filter(([, v]) => v !== '' && v != null);
-    const qs = new URLSearchParams(entries).toString();
-    return request(`/products${qs ? `?${qs}` : ''}`);
-  },
-  getCategories: () => request('/products/categories'),
-  getProduct: (id) => request(`/products/${id}`),
-  createProduct: (body) => request('/products', { method: 'POST', body }),
-  getMyProducts: () => request('/products/mine/list'),
-  restockProduct: (id, quantity) => request('/products/' + id + '/restock', { method: 'PATCH', body: { quantity } }),
-  deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
-
-  // Upload a product image — returns { imageUrl }
-  uploadProductImage: (file) => {
-    const form = new FormData();
-    form.append('image', file);
-    return request('/products/upload-image', { method: 'POST', body: form });
-  },
-
-  placeOrder: (body) => request('/orders', { method: 'POST', body }),
-  getOrders: () => request('/orders'),
-  getSales: () => request('/orders/sales'),
-
-  getWallet: () => request('/wallet'),
-  getTransactions: () => request('/wallet/transactions'),
-  fundWallet: () => request('/wallet/fund', { method: 'POST' }),
-
-  getXlmRate: () => request('/rates/xlm-usd'),
-  getAnalytics: () => request('/analytics/farmer'),
-  updateProduct: (id, body) => request(`/products/${id}`, { method: 'PATCH', body }),
-  updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
-
-  // Admin
-  adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
-  adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
-  adminGetStats: () => request('/admin/stats'),
-
-};
-const BASE = '/api';
-
-// Access token lives in memory only — never in localStorage
-let accessToken = null;
-
-export function setAccessToken(token) { accessToken = token; }
-export function clearAccessToken()    { accessToken = null; }
-
-function getCsrfToken() {
-  const match = document.cookie.split(';').find(c => c.trim().startsWith('csrf_token='));
-  return match ? match.trim().split('=')[1] : null;
-}
-
-let csrfReady = null;
-function ensureCsrfToken() {
-  if (getCsrfToken()) return Promise.resolve();
-  if (!csrfReady) {
-    csrfReady = fetch(`${BASE}/csrf-token`, { credentials: 'include' })
-      .then(r => r.json())
-      .catch(() => null)
-      .finally(() => { csrfReady = null; });
-  }
-  return csrfReady;
-}
-
-async function refreshAccessToken() {
-  const res = await fetch(`${BASE}/auth/refresh`, { method: 'POST', credentials: 'include' });
-  if (!res.ok) return null;
-  const data = await res.json();
-  accessToken = data.token;
-  return accessToken;
-}
-
-const MUTATING    = ['POST', 'PUT', 'PATCH', 'DELETE'];
-const CSRF_EXEMPT = ['/auth/login', '/auth/register'];
-
-async function request(path, options = {}, retry = true) {
-  const method = (options.method || 'GET').toUpperCase();
-  const needsCsrf = MUTATING.includes(method) && !CSRF_EXEMPT.includes(path);
-  if (needsCsrf) await ensureCsrfToken();
-
-  const csrfToken  = needsCsrf ? getCsrfToken() : null;
-  const isFormData = options.body instanceof FormData;
-
-  const headers = {};
-  if (!isFormData) headers['Content-Type'] = 'application/json';
-  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-  if (csrfToken)   headers['X-CSRF-Token']  = csrfToken;
-  Object.assign(headers, options.headers || {});
-
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    credentials: 'include',
-    headers,
-    body: isFormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
-  });
-
-  if (res.status === 401 && retry) {
-    const newToken = await refreshAccessToken();
-    if (newToken) return request(path, options, false);
-    clearAccessToken();
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || 'Session expired');
-  }
-
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
-  return data;
-}
-
 /** Build a query string from a params object, omitting empty/null values. */
 function toQs(params) {
   const entries = Object.entries(params).filter(([, v]) => v !== '' && v != null);
@@ -211,73 +105,103 @@ function toQs(params) {
 
 export const api = {
   register: (body) => request('/auth/register', { method: 'POST', body }),
-  login:    (body) => request('/auth/login',    { method: 'POST', body }),
-  logout:   ()     => request('/auth/logout',   { method: 'POST' }),
-  refresh:  ()     => refreshAccessToken(),
-
-  // filters may include: category, minPrice, maxPrice, seller, available, page, limit
-  getProducts:  (filters = {}) => request(`/products${toQs(filters)}`),
-  getCategories: ()            => request('/products/categories'),
-  getProduct:   (id)           => request(`/products/${id}`),
-  createProduct: (body)        => request('/products', { method: 'POST', body }),
-  getMyProducts: ()            => request('/products/mine/list'),
-  deleteProduct: (id)          => request(`/products/${id}`, { method: 'DELETE' }),
-  getProductReviews: (id)      => request(`/products/${id}/reviews`),
   login: (body) => request('/auth/login', { method: 'POST', body }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   refresh: () => refreshAccessToken(),
 
-  // filters may include: category, minPrice, maxPrice, seller, available, page, limit
+  // Products
   getProducts: (filters = {}) => request(`/products${toQs(filters)}`),
   getCategories: () => request('/products/categories'),
   getProduct: (id) => request(`/products/${id}`),
   createProduct: (body) => request('/products', { method: 'POST', body }),
   getMyProducts: () => request('/products/mine/list'),
+  restockProduct: (id, quantity) => request(`/products/${id}/restock`, { method: 'PATCH', body: { quantity } }),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
   updateProduct: (id, body) => request(`/products/${id}`, { method: 'PATCH', body }),
+  getProductReviews: (id) => request(`/products/${id}/reviews`),
+  searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
 
+  // Upload a product image — returns { imageUrl }
   uploadProductImage: (file) => {
     const form = new FormData();
     form.append('image', file);
     return request('/products/upload-image', { method: 'POST', body: form });
   },
 
-  placeOrder:   (body)         => request('/orders', { method: 'POST', body }),
-  // params may include: status, page, limit
-  getOrders:    (params = {})  => request(`/orders${toQs(params)}`),
-  getSales:     (params = {})  => request(`/orders/sales${toQs(params)}`),
-
-  submitReview: (body)         => request('/reviews', { method: 'POST', body }),
-
-  getWallet:      ()           => request('/wallet'),
-  getTransactions: ()          => request('/wallet/transactions'),
-  fundWallet:     ()           => request('/wallet/fund', { method: 'POST' }),
-  searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
-
+  // Bulk upload products via CSV — returns { created, skipped, errors }\n  bulkUploadProducts: (file) => {\n    const form = new FormData();\n    form.append('file', file);\n    return request('/products/bulk', { method: 'POST', body: form });\n  },\n\n  // Orders
   placeOrder: (body) => request('/orders', { method: 'POST', body }),
-  // params may include: status, page, limit
   getOrders: (params = {}) => request(`/orders${toQs(params)}`),
-  // params may include: page, limit
   getSales: (params = {}) => request(`/orders/sales${toQs(params)}`),
-  getOrders: (status) => request(`/orders${status ? `?status=${status}` : ''}`),
-  getSales: () => request('/orders/sales'),
   updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
+
+  submitReview: (body) => request('/reviews', { method: 'POST', body }),
 
   getWallet: () => request('/wallet'),
   getTransactions: () => request('/wallet/transactions'),
   fundWallet: () => request('/wallet/fund', { method: 'POST' }),
-  getAnalytics: () => request('/analytics/farmer'),
-  getCategories: function() { return request('/products/categories'); },
-  getProduct: function(id) { return request('/products/' + id); },
-  createProduct: function(body) { return request('/products', { method: 'POST', body: body }); },
-  getMyProducts: function() { return request('/products/mine/list'); },
-  deleteProduct: function(id) { return request('/products/' + id, { method: 'DELETE' }); },
 
-  placeOrder: function(body) { return request('/orders', { method: 'POST', body: body }); },
+  getFarmer: (id) => request(`/farmers/${id}`),
+  updateFarmerProfile: (body) => request('/farmers/me', { method: 'PATCH', body }),
+
+  // Favorites
+  addFavorite: (productId) => request('/favorites', { method: 'POST', body: { product_id: productId } }),
+  removeFavorite: (productId) => request(`/favorites/${productId}`, { method: 'DELETE' }),
+  getFavorites: (params = {}) => request(`/favorites${toQs(params)}`),
+  checkFavorite: (productId) => request(`/favorites/check/${productId}`),
+
+  getXlmRate: () => request('/rates/xlm-usd'),
+  getAnalytics: () => request('/analytics/farmer'),
+
+  // Admin
+  adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
+  adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  adminGetStats: () => request('/admin/stats'),
+  // Reviews
+  submitReview: (body) => request('/reviews', { method: 'POST', body }),
+
+  // Wallet
+  getWallet: () => request('/wallet'),
+  getTransactions: () => request('/wallet/transactions'),
+  fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+
+  // Rates
+  getXlmRate: () => request('/rates/xlm-usd'),
+
+  // Analytics
+  getAnalytics: () => request('/analytics/farmer'),
+
+  // Addresses
+  getAddresses: () => request('/addresses'),
+  createAddress: (body) => request('/addresses', { method: 'POST', body }),
+  updateAddress: (id, body) => request(`/addresses/${id}`, { method: 'PUT', body }),
+  deleteAddress: (id) => request(`/addresses/${id}`, { method: 'DELETE' }),
+  setDefaultAddress: (id) => request(`/addresses/${id}/default`, { method: 'PATCH' }),
+
+  // Admin
+  adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
+  adminDeactivateUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
+  adminGetStats: () => request('/admin/stats'),
+  placeOrder: function(body, idempotencyKey) {
+    return request('/orders', {
+      method: 'POST',
+      body: body,
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}
+    });
+  },
   getOrders: function(status) { return request('/orders' + (status ? '?status=' + status : '')); },
   getSales: function() { return request('/orders/sales'); },
 
   getWallet: function() { return request('/wallet'); },
   getTransactions: function() { return request('/wallet/transactions'); },
   fundWallet: function() { return request('/wallet/fund', { method: 'POST' }); },
+
+  setStockAlert:    (productId) => request(`/products/${productId}/alert`,        { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`,        { method: 'DELETE' }),
+  getMyAlert:       (productId) => request(`/products/${productId}/alert/status`),
+  fundEscrow: (orderId) => request(`/orders/${orderId}/escrow`, { method: 'POST' }),
+  claimEscrow: (orderId) => request(`/orders/${orderId}/claim`, { method: 'POST' }),
+
+  setStockAlert: (productId) => request(`/products/${productId}/alert`, { method: 'POST' }),
+  removeStockAlert: (productId) => request(`/products/${productId}/alert`, { method: 'DELETE' }),
+  getMyAlert: (productId) => request(`/products/${productId}/alert/status`),
 };

@@ -74,21 +74,22 @@ Runs on http://localhost:3000
 
 ## API Endpoints
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | /api/auth/register | — | Register user |
-| POST | /api/auth/login | — | Login |
-| GET | /api/products | — | Browse all products |
-| GET | /api/products/:id | — | Product detail |
-| POST | /api/products | farmer | Create listing |
-| GET | /api/products/mine/list | farmer | My listings |
-| DELETE | /api/products/:id | farmer | Remove listing |
-| POST | /api/orders | buyer | Place + pay order |
-| GET | /api/orders | buyer | Order history |
-| GET | /api/orders/sales | farmer | Incoming sales |
-| GET | /api/wallet | auth | Balance |
-| GET | /api/wallet/transactions | auth | TX history |
-| POST | /api/wallet/fund | auth | Fund via Friendbot (testnet) |
+| Method | Path                                     | Auth   | Description                                                        |
+| ------ | ---------------------------------------- | ------ | ------------------------------------------------------------------ |
+| POST   | /api/auth/register                       | —      | Register user                                                      |
+| POST   | /api/auth/login                          | —      | Login                                                              |
+| GET    | /api/products                            | —      | Browse all products                                                |
+| GET    | /api/products/:id                        | —      | Product detail                                                     |
+| POST   | /api/products                            | farmer | Create listing                                                     |
+| GET    | /api/products/mine/list                  | farmer | My listings                                                        |
+| DELETE | /api/products/:id                        | farmer | Remove listing                                                     |
+| POST   | /api/orders                              | buyer  | Place + pay order                                                  |
+| GET    | /api/orders                              | buyer  | Order history                                                      |
+| GET    | /api/orders/sales                        | farmer | Incoming sales                                                     |
+| GET    | /api/wallet                              | auth   | Balance                                                            |
+| GET    | /api/wallet/transactions                 | auth   | TX history                                                         |
+| POST   | /api/wallet/fund                         | auth   | Fund via Friendbot (testnet)                                       |
+| GET    | /api/contracts/:contractId/state?prefix= | auth   | View Soroban contract storage entries (JSON: key, val, durability) |
 
 ## Notes
 

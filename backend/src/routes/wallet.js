@@ -2,15 +2,14 @@ const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { getBalance, getTransactions, fundTestnetAccount, sendPayment } = require('../utils/stellar');
-const { getBalance, getTransactions, fundTestnetAccount, isTestnet } = require('../utils/stellar');
+const { getBalance, getTransactions, fundTestnetAccount, sendPayment, isTestnet } = require('../utils/stellar');
 const { err } = require('../middleware/error');
 
 // GET /api/wallet
 router.get('/', auth, async (req, res) => {
-  const user = db.prepare('SELECT stellar_public_key FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT stellar_public_key, referral_code FROM users WHERE id = ?').get(req.user.id);
   const balance = await getBalance(user.stellar_public_key);
-  res.json({ success: true, publicKey: user.stellar_public_key, balance });
+  res.json({ success: true, publicKey: user.stellar_public_key, balance, referralCode: user.referral_code });
 });
 
 // GET /api/wallet/transactions

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { validateProduct } from '../utils/validation';
+import { getErrorMessage } from '../utils/errorMessages';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE_MB = 5;
@@ -16,12 +18,15 @@ const s = {
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 },
   card: { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 8px #0001' },
   label: { display: 'block', fontSize: 13, marginBottom: 4, color: '#555' },
-  input: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' },
-  textarea: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginBottom: 12, minHeight: 80, resize: 'vertical', boxSizing: 'border-box' },
+  input: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginBottom: 4, boxSizing: 'border-box' },
+  inputErr: { width: '100%', padding: '9px 12px', border: '1px solid #c0392b', borderRadius: 8, fontSize: 14, marginBottom: 4, boxSizing: 'border-box' },
+  fieldErr: { color: '#c0392b', fontSize: 12, marginBottom: 8 },
+  textarea: { width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginBottom: 4, minHeight: 80, resize: 'vertical', boxSizing: 'border-box' },
   btn: { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontWeight: 600 },
   product: { borderBottom: '1px solid #eee', padding: '12px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   del: { background: '#fee', color: '#c0392b', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 },
   msg: { padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 14 },
+  address: { fontSize: 12, color: '#888', marginTop: 4, fontStyle: 'italic' },
   // image upload
   uploadZone: {
     border: '2px dashed #b7e4c7', borderRadius: 10, padding: '18px 12px',
@@ -33,10 +38,15 @@ const s = {
   removeImg: { background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 12, marginBottom: 12 },
   imgErr: { color: '#c0392b', fontSize: 12, marginBottom: 8 },
   uploading: { color: '#888', fontSize: 12, marginBottom: 8 },
+  csvBtn: { background: '#218c74', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontWeight: 600, marginRight: 8 },
+  csvInput: { display: 'none' },
+  csvResult: { padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 14 },
   productThumb: { width: 36, height: 36, objectFit: 'cover', borderRadius: 6, marginRight: 10, verticalAlign: 'middle' },
 };
 
 const EMPTY_FORM = { name: '', description: '', price: '', quantity: '', unit: 'kg', category: 'other' };
+
+import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -44,6 +54,7 @@ export default function Dashboard() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [restockVals, setRestockVals] = useState({});
   const [msg, setMsg] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
   const [sales, setSales] = useState([]);
   const [salesMsg, setSalesMsg] = useState({});
   const [formErrors, setFormErrors] = useState({});
@@ -64,6 +75,12 @@ export default function Dashboard() {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef(null);
+
+  // CSV upload state
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvResult, setCsvResult] = useState(null);
+  const csvInputRef = useRef(null);
 
   async function load() {
     try {
@@ -139,7 +156,7 @@ export default function Dashboard() {
         setAvatarFile(null);
       } catch (err) {
         setAvatarUploading(false);
-        setProfileMsg({ type: 'err', text: `Avatar upload failed: ${err.message}` });
+        setProfileMsg({ type: 'err', text: `Avatar upload failed: ${getErrorMessage(err)}` });
         return;
       }
       setAvatarUploading(false);
@@ -154,7 +171,7 @@ export default function Dashboard() {
       setProfile({ bio: res.data.bio || '', location: res.data.location || '', avatar_url: res.data.avatar_url || '' });
       setProfileMsg({ type: 'ok', text: 'Profile updated' });
     } catch (err) {
-      setProfileMsg({ type: 'err', text: err.message });
+      setProfileMsg({ type: 'err', text: getErrorMessage(err) });
     }
   }
 
@@ -183,6 +200,11 @@ export default function Dashboard() {
       return;
     }
 
+    // Client-side validation
+    const errs = validateProduct(form);
+    if (Object.keys(errs).length > 0) { setFormErrors(errs); return; }
+    setFormErrors({});
+
     // Upload image first if one is selected but not yet uploaded
     let finalImageUrl = imageUrl;
     if (imageFile && !imageUrl) {
@@ -193,7 +215,7 @@ export default function Dashboard() {
         setImageUrl(res.imageUrl);
       } catch (err) {
         setUploading(false);
-        setMsg({ type: 'err', text: `Image upload failed: ${err.message}` });
+        setMsg({ type: 'err', text: `Image upload failed: ${getErrorMessage(err)}` });
         return;
       }
       setUploading(false);
@@ -211,7 +233,7 @@ export default function Dashboard() {
       removeImage();
       load();
     } catch (err) {
-      setMsg({ type: 'err', text: err.message });
+      setMsg({ type: 'err', text: getErrorMessage(err) });
     }
   }
 
@@ -229,6 +251,10 @@ export default function Dashboard() {
       load();
     } catch (err) {
       alert(err.message);
+    }
+  }
+
+      alert(getErrorMessage(err));
   async function handleStatusUpdate(orderId, status) {
     try {
       await api.updateOrderStatus(orderId, status);
@@ -239,12 +265,102 @@ export default function Dashboard() {
     }
   }
 
+  async function handleCsvUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.csv')) {
+      setCsvResult({ type: 'err', text: 'Please upload a .csv file' });
+      return;
+    }
+    setCsvFile(file);
+    setCsvUploading(true);
+    setCsvResult(null);
+    try {
+      const res = await api.bulkUploadProducts(file);
+      setCsvResult({
+        type: 'ok',
+        text: `Upload complete: ${res.created} created, ${res.skipped} skipped, ${res.errors?.length || 0} errors`,
+        details: res.errors,
+      });
+      load();
+    } catch (err) {
+      setCsvResult({ type: 'err', text: err.message });
+    } finally {
+      setCsvUploading(false);
+      setCsvFile(null);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  }
+
+  function downloadCsvTemplate() {
+    const csv = 'name,description,price,quantity,unit,category\nOrganic Tomatoes,Fresh organic tomatoes,2.50,100,kg,vegetables\nFree Range Eggs,Farm fresh eggs,5.00,50,dozen,dairy\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'product-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
-    <div style={s.page}>
-      <div style={s.title}>🌾 Farmer Dashboard</div>
+<div style={s.page}>
+      <div style={s.title}>{user?.role === 'admin' ? '🔧 Admin Dashboard' : '🌾 Farmer Dashboard'}</div>
+      {user.role === 'admin' && (
+        <div style={{ ...s.card, marginBottom: 24 }}> 
+          <h3 style={{ marginBottom: 16, color: '#333' }}>📋 Contract State Viewer</h3>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div style={{ flex: 1, minWidth: 300 }}>
+              <label style={s.label}>Contract ID</label>
+              <input
+                style={s.input}
+                value={contractId}
+                onChange={(e) => setContractId(e.target.value)}
+                placeholder="e.g. CB64..."
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={s.label}>Key Prefix (optional)</label>
+              <input
+                style={s.input}
+                value={prefix}
+                onChange={(e) => setPrefix(e.target.value)}
+                placeholder="e.g. ADMIN_ or hex"
+              />
+            </div>
+            <button style={s.btn} onClick={loadContractState} disabled={loadingState}>
+              {loadingState ? 'Loading...' : 'Load State'}
+            </button>
+          </div>
+          {stateErr && <div style={{ ...s.msg, background: '#fee', color: '#c0392b', marginTop: 12 }}>{stateErr}</div>}
+          {stateEntries.length > 0 && (
+            <div style={{ marginTop: 16, maxHeight: 400, overflow: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#f8f9fa' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>Key</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>Value</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>Durability</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stateEntries.map((entry, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{entry.key}</td>
+                      <td style={{ padding: '8px 12px', fontFamily: 'monospace', maxWidth: 300, wordBreak: 'break-all' }}>{entry.val}</td>
+                      <td style={{ padding: '8px 12px' }}>{entry.durability}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       <div style={s.grid}>
-        <div style={s.card}>
-          <h3 style={{ marginBottom: 16, color: '#333' }}>Add New Product</h3>
+        {user.role === 'farmer' && (
+          <div style={s.card}>
+            <h3 style={{ marginBottom: 16, color: '#333' }}>Add New Product</h3>
           {msg && (
             <div style={{ ...s.msg, background: msg.type === 'ok' ? '#d8f3dc' : '#fee', color: msg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
               {msg.text}
@@ -260,6 +376,14 @@ export default function Dashboard() {
                   onChange={e => {
                     setForm({ ...form, [key]: e.target.value });
                     if (formErrors[key]) setFormErrors({ ...formErrors, [key]: undefined });
+                  style={formErrors[key] ? s.inputErr : s.input}
+                  value={form[key]}
+                  type={key === 'price' || key === 'quantity' ? 'number' : 'text'}
+                  min={key === 'price' || key === 'quantity' ? '0' : undefined}
+                  step={key === 'price' ? 'any' : undefined}
+                  onChange={e => {
+                    setForm({ ...form, [key]: e.target.value });
+                    if (formErrors[key]) setFormErrors(fe => ({ ...fe, [key]: '' }));
                   }}
                   required={key !== 'unit'}
                   type={key === 'price' || key === 'quantity' ? 'number' : undefined}
@@ -267,6 +391,7 @@ export default function Dashboard() {
                   min={key === 'price' || key === 'quantity' ? '0' : undefined}
                 />
                 {formErrors[key] && <div style={{ ...s.imgErr, marginTop: -8, marginBottom: 4 }}>{formErrors[key]}</div>}
+                {formErrors[key] && <div style={s.fieldErr} role="alert">{formErrors[key]}</div>}
               </div>
             ))}
 
@@ -357,6 +482,46 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* CSV Bulk Upload */}
+      <div style={{ ...s.card, marginTop: 24 }}>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>📤 Bulk Upload Products</h3>
+        <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+          Upload multiple products at once using a CSV file. Maximum 500 rows per upload.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button style={s.csvBtn} onClick={() => csvInputRef.current?.click()} disabled={csvUploading}>
+            {csvUploading ? 'Uploading...' : '📁 Upload CSV'}
+          </button>
+          <button style={{ ...s.csvBtn, background: '#555' }} onClick={downloadCsvTemplate}>
+            📥 Download Template
+          </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            style={s.csvInput}
+            onChange={handleCsvUpload}
+          />
+        </div>
+        {csvResult && (
+          <div style={{ ...s.csvResult, background: csvResult.type === 'ok' ? '#d8f3dc' : '#fee', color: csvResult.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+            {csvResult.text}
+            {csvResult.details && csvResult.details.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                <strong>Errors:</strong>
+                <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                  {csvResult.details.slice(0, 10).map((err, i) => (
+                    <li key={i}>Row {err.row}: {err.error}</li>
+                  ))}
+                  {csvResult.details.length > 10 && <li>...and {csvResult.details.length - 10} more errors</li>}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Profile edit */}
       <div style={{ ...s.card, marginTop: 24 }}>
         <h3 style={{ marginBottom: 16, color: '#333' }}>My Farmer Profile</h3>
@@ -429,6 +594,12 @@ export default function Dashboard() {
                     <div style={{ fontSize: 13, color: '#666' }}>
                       {o.quantity} units · {parseFloat(o.total_price).toFixed(2)} XLM · by {o.buyer_name}
                     </div>
+                    {o.address_label && (
+                      <div style={s.address}>
+                        📍 {o.address_label}: {o.address_street}, {o.address_city}, {o.address_country}
+                        {o.address_postal_code ? ` ${o.address_postal_code}` : ''}
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: '#aaa' }}>{new Date(o.created_at).toLocaleDateString()}</div>
                     {m && <div style={{ fontSize: 12, color: m.type === 'ok' ? '#2d6a4f' : '#c0392b', marginTop: 4 }}>{m.text}</div>}
                   </div>
