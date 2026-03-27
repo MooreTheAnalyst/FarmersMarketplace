@@ -3,8 +3,7 @@ const db = require('../db/schema');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const { sendPayment, getBalance } = require('../utils/stellar');
-const { sendOrderEmails, sendStatusUpdateEmail } = require('../utils/mailer');
-const { sendOrderEmails, sendLowStockAlert } = require('../utils/mailer');
+const { sendOrderEmails, sendStatusUpdateEmail, sendLowStockAlert } = require('../utils/mailer');
 const { err } = require('../middleware/error');
 
 // POST /api/orders - buyer places + pays for an order
@@ -40,6 +39,9 @@ router.post('/', auth, validate.order, async (req, res) => {
     });
 
   const reserveStock = db.transaction((buyerId, productId, qty, total) => {
+    // Atomic stock check + decrement: single UPDATE with WHERE quantity >= ? prevents race conditions.
+    // If multiple concurrent requests try to buy the last units, only one succeeds (changes > 0).
+    // Others fail because quantity no longer meets the WHERE condition (changes === 0).
     const deducted = db.prepare(
       'UPDATE products SET quantity = quantity - ? WHERE id = ? AND quantity >= ?'
     ).run(qty, productId, qty);
