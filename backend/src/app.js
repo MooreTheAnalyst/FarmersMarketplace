@@ -13,6 +13,14 @@ if (missing.length) {
   process.exit(1);
 }
 
+const path = require('path');
+const express = require('express');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const { enforceHttps, hsts } = require('./middleware/https');
+const { csrfProtect, csrfTokenHandler } = require('./middleware/csrf');
+const { errorHandler } = require('./middleware/error');
+const { sanitizeResponse } = require('./middleware/sanitize');
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
@@ -27,6 +35,23 @@ const app = express();
 app.use(enforceHttps);
 app.use(hsts);
 
+// Configure CORS with support for multiple origins
+const corsOrigins = process.env.CORS_ORIGIN || process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+const allowedOrigins = corsOrigins.split(',').map(origin => origin.trim());
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+}));
 app.use(
   cors({
     origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
@@ -48,6 +73,9 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Sanitize responses to strip sensitive fields (safety net)
+app.use(sanitizeResponse);
 
 // Serve uploaded product images as static files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));

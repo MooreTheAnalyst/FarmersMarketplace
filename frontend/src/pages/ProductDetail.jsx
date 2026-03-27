@@ -333,7 +333,7 @@ export default function ProductDetail() {
         )}
 
         <div style={s.total}>Total: <strong>{total} XLM</strong></div>
-        {error && <div style={s.err}>{error}</div>}
+        {error && <div style={s.err} dangerouslySetInnerHTML={{ __html: error }} />}
 
         <button
           style={{ ...s.btn, ...(loading && { opacity: 0.6, cursor: 'not-allowed' }) }}

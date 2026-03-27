@@ -50,7 +50,19 @@ async function getBalance(publicKey) {
 // Send XLM payment from buyer to farmer
 async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
   const senderKeypair = StellarSdk.Keypair.fromSecret(senderSecret);
-  const senderAccount = await server.loadAccount(senderKeypair.publicKey());
+  
+  let senderAccount;
+  try {
+    senderAccount = await server.loadAccount(senderKeypair.publicKey());
+  } catch (error) {
+    // Check if account is not found (unfunded)
+    if (error.response && error.response.status === 404) {
+      const err = new Error('Stellar account not found. Please fund your wallet to activate it.');
+      err.code = 'account_not_found';
+      throw err;
+    }
+    throw error;
+  }
 
   const transaction = new StellarSdk.TransactionBuilder(senderAccount, {
     fee: StellarSdk.BASE_FEE,

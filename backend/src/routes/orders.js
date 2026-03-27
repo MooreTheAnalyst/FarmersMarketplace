@@ -41,7 +41,7 @@ router.post('/', auth, validate.order, async (req, res) => {
 
   if (!product) return err(res, 404, 'Product not found', 'not_found');
 
-  const buyer = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  const buyer = db.prepare('SELECT id, name, email, stellar_public_key, stellar_secret_key FROM users WHERE id = ?').get(req.user.id);
   const totalPrice = product.price * quantity;
 
   const balance = await getBalance(buyer.stellar_public_key);
@@ -87,8 +87,14 @@ router.post('/', auth, validate.order, async (req, res) => {
       memo: `Order#${orderId}`,
     });
 
-    db.prepare('UPDATE orders SET status = ?, stellar_tx_hash = ? WHERE id = ?').run('paid', txHash, orderId);
+    // Transaction boundary: Update order status to 'paid' and save txHash
+    // This ensures order status and txHash are updated atomically
+    const markOrderPaid = db.transaction(() => {
+      db.prepare('UPDATE orders SET status = ?, stellar_tx_hash = ? WHERE id = ?').run('paid', txHash, orderId);
+    });
+    markOrderPaid();
 
+    const farmer = db.prepare('SELECT id, name, email, stellar_public_key FROM users WHERE id = ?').get(product.farmer_id);
     // Referral Bonus Logic
     if (buyer.referred_by && buyer.referral_bonus_sent === 0) {
       const referrer = db.prepare('SELECT stellar_public_key FROM users WHERE id = ?').get(buyer.referred_by);
@@ -130,6 +136,25 @@ router.post('/', auth, validate.order, async (req, res) => {
     cacheResponse(idempotencyKey, responseData);
     res.json(responseData);
   } catch (e) {
+    // Transaction boundary: Update order status to 'failed' and restore stock atomically
+    // This ensures if either operation fails, both are rolled back
+    const markOrderFailed = db.transaction(() => {
+      db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('failed', orderId);
+      db.prepare('UPDATE products SET quantity = quantity + ? WHERE id = ?').run(quantity, product_id);
+    });
+    markOrderFailed();
+    
+    // Check if error is due to unfunded account
+    if (e.code === 'account_not_found') {
+      return res.status(402).json({
+        success: false,
+        message: 'Please fund your wallet before purchasing',
+        code: 'unfunded_account',
+        orderId,
+      });
+    }
+    
+    res.status(402).json({ success: false, message: 'Payment failed: ' + e.message, code: 'payment_failed', orderId });
     db.prepare('UPDATE products SET quantity = quantity + ? WHERE id = ?').run(quantity, product_id);
     db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('failed', orderId);
     const errorData = { success: false, message: 'Payment failed: ' + e.message, code: 'payment_failed', orderId };

@@ -101,7 +101,7 @@ router.post('/register', validate.register, async (req, res) => {
 // POST /api/auth/login
 router.post('/login', validate.login, async (req, res) => {
   const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const user = db.prepare('SELECT id, name, email, password, role, stellar_public_key FROM users WHERE email = ?').get(email);
   if (!user) return err(res, 401, 'Invalid credentials', 'invalid_credentials');
 
   const valid = await bcrypt.compare(password, user.password);
