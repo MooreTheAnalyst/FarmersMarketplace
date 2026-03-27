@@ -23,6 +23,7 @@ router.use('/api/v1/auth',     require('./auth'));
 router.use('/api/v1/products', require('./products'));
 router.use('/api/v1/orders',   require('./orders'));
 router.use('/api/v1/wallet',   require('./wallet'));
+router.use('/api/v1',          require('./reviews'));
 
 router.get('/api/v1/health', (_, res) => res.json({ status: 'ok', version: 'v1' }));
 
@@ -32,6 +33,12 @@ router.use('/api/products',  require('./products'));
 router.use('/api/orders',    require('./orders'));
 router.use('/api/wallet',    require('./wallet'));
 router.use('/api/analytics', require('./analytics'));
+// Unversioned routes under /api
+router.use('/api/auth',     require('./auth'));
+router.use('/api/products', require('./products'));
+router.use('/api/orders',   require('./orders'));
+router.use('/api/wallet',   require('./wallet'));
+router.use('/api',          require('./reviews'));
 
 router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 

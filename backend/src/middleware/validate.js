@@ -52,6 +52,12 @@ const schemas = {
     body('quantity').isInt({ gt: 0 }).withMessage('quantity must be a positive integer'),
     handle,
   ],
+  review: [
+    body('order_id').isInt({ gt: 0 }).withMessage('order_id must be a positive integer'),
+    body('rating').isInt({ min: 1, max: 5 }).withMessage('rating must be an integer between 1 and 5'),
+    body('comment').optional().isString().isLength({ max: 1000 }).withMessage('comment must be 1000 characters or fewer').trim(),
+    handle,
+  ],
   sendXLM: [
     body('destination')
       .trim()
