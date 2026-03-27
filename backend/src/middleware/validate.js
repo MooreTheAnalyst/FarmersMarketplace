@@ -25,6 +25,7 @@ function validate(schema) {
   };
 }
 
+// express-validator error handler middleware
 function handle(req, res, next) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const ALL_STATUSES = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'failed'];
 const FILTER_TABS = ['all', ...ALL_STATUSES];
@@ -76,6 +77,9 @@ export default function Orders() {
   const [activeTab, setActiveTab]  = useState('all');
   const [loading, setLoading]      = useState(true);
   const [hovered, setHovered]      = useState(null);
+  const { user } = useAuth();
+  const [claimingId, setClaimingId] = useState(null);
+  const [claimError, setClaimError] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +94,19 @@ export default function Orders() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  async function handleClaim(orderId) {
+    setClaimingId(orderId);
+    setClaimError(prev => ({ ...prev, [orderId]: '' }));
+    try {
+      await api.claimEscrow(orderId);
+      load();
+    } catch (e) {
+      setClaimError(prev => ({ ...prev, [orderId]: e.message }));
+    } finally {
+      setClaimingId(null);
+    }
+  }
 
   const stats = {
     total:   allOrders.length,
@@ -155,6 +172,36 @@ export default function Orders() {
                     </div>
                   )}
                   <StatusTimeline status={o.status} />
+                  {o.escrow_status && o.escrow_status !== 'none' && (
+                    <div style={{ marginTop: 8 }}>
+                      <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 600,
+                        background: o.escrow_status === 'funded' ? '#fff3cd' : o.escrow_status === 'claimed' ? '#d8f3dc' : '#eee',
+                        color: o.escrow_status === 'funded' ? '#856404' : o.escrow_status === 'claimed' ? '#2d6a4f' : '#555' }}>
+                        🔒 Escrow: {o.escrow_status}
+                      </span>
+                      {o.escrow_balance_id && (
+                        <div style={{ ...s.hash, marginTop: 4 }}>
+                          Balance:{' '}
+                          <a href={`https://stellar.expert/explorer/testnet/claimable-balance/${o.escrow_balance_id}`} target="_blank" rel="noreferrer" style={{ color: '#2d6a4f' }}>
+                            {o.escrow_balance_id.slice(0, 20)}...
+                          </a>
+                        </div>
+                      )}
+                      {user?.role === 'farmer' && o.escrow_status === 'funded' && (
+                        <div style={{ marginTop: 6 }}>
+                          <button
+                            style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: o.status === 'delivered' ? 'pointer' : 'not-allowed',
+                              background: o.status === 'delivered' ? '#2d6a4f' : '#ccc', color: '#fff', fontWeight: 600 }}
+                            disabled={o.status !== 'delivered' || claimingId === o.id}
+                            onClick={() => handleClaim(o.id)}>
+                            {claimingId === o.id ? 'Claiming...' : '💰 Claim Payment'}
+                          </button>
+                          {o.status !== 'delivered' && <span style={{ fontSize: 11, color: '#888', marginLeft: 8 }}>Mark as delivered first</span>}
+                          {claimError[o.id] && <div style={{ fontSize: 12, color: '#c0392b', marginTop: 4 }}>{claimError[o.id]}</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div style={s.right}>
                   <span style={{ ...s.badge, background: st.bg, color: st.color }}>

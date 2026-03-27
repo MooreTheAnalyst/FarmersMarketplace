@@ -8,6 +8,14 @@ const SECRET      = process.env.JWT_SECRET || 'test-secret-for-jest';
 const buyerToken  = jwt.sign({ id: 1, role: 'buyer'  }, SECRET, { expiresIn: '1h' });
 const farmerToken = jwt.sign({ id: 2, role: 'farmer' }, SECRET, { expiresIn: '1h' });
 
+// Mock mailer
+jest.mock('../src/utils/mailer', () => ({
+  sendOrderEmails:      jest.fn().mockResolvedValue({}),
+  sendLowStockAlert:    jest.fn().mockResolvedValue({}),
+  sendStatusUpdateEmail: jest.fn().mockResolvedValue({}),
+  sendBackInStockEmail: jest.fn().mockResolvedValue({}),
+}));
+
 function stmt(getVal, runVal = { changes: 1, lastInsertRowid: 1 }, allVal = []) {
   return { get: jest.fn().mockReturnValue(getVal), run: jest.fn().mockReturnValue(runVal), all: jest.fn().mockReturnValue(allVal) };
 }
@@ -38,6 +46,10 @@ describe('POST /api/products/:id/alert', () => {
   test('200 — inserts alert for out-of-stock product', async () => {
     const runMock = jest.fn().mockReturnValue({ lastInsertRowid: 1 });
     mockDb.prepare.mockReturnValue({ get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }), run: runMock, all: jest.fn() });
+  test('201/200 — inserts alert for out-of-stock product', async () => {
+    const runMock = jest.fn().mockReturnValue({ lastInsertRowid: 1 });
+    const s = { get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }), run: runMock, all: jest.fn() };
+    mockDb.prepare.mockReturnValue(s);
 
     const res = await request(app).post('/api/products/5/alert').set('Authorization', `Bearer ${buyerToken}`);
     expect(res.status).toBe(200);
@@ -51,6 +63,13 @@ describe('POST /api/products/:id/alert', () => {
       run: jest.fn().mockImplementation(() => { throw new Error('UNIQUE constraint failed'); }),
       all: jest.fn(),
     });
+    const s = {
+      get: jest.fn().mockReturnValue({ id: 5, quantity: 0 }),
+      run: jest.fn().mockImplementation(() => { throw new Error('UNIQUE constraint failed'); }),
+      all: jest.fn(),
+    };
+    mockDb.prepare.mockReturnValue(s);
+
     const res = await request(app).post('/api/products/5/alert').set('Authorization', `Bearer ${buyerToken}`);
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('conflict');
@@ -68,6 +87,7 @@ describe('DELETE /api/products/:id/alert', () => {
   test('200 — removes alert for authenticated user', async () => {
     const runMock = jest.fn().mockReturnValue({ changes: 1 });
     mockDb.prepare.mockReturnValue({ run: runMock, get: jest.fn(), all: jest.fn() });
+
     const res = await request(app).delete('/api/products/5/alert').set('Authorization', `Bearer ${buyerToken}`);
     expect(res.status).toBe(200);
     expect(runMock).toHaveBeenCalledWith(1, '5');
@@ -112,6 +132,12 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
       .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn() })
       .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn().mockReturnValue(subscribers) })
       .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn() });
+    // prepare() is called multiple times; we need different behaviour per call
+    mockDb.prepare
+      .mockReturnValueOnce({ get: jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 0, farmer_id: 2 }), run: runMock, all: jest.fn() }) // SELECT product
+      .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn() })  // UPDATE quantity
+      .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn().mockReturnValue(subscribers) }) // SELECT subscribers
+      .mockReturnValueOnce({ get: jest.fn(), run: runMock, all: jest.fn() }); // DELETE alerts
 
     const res = await request(app)
       .patch('/api/products/5/restock')
@@ -127,15 +153,18 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
   });
 
   test('does not notify when product was already in stock', async () => {
+  test('does not notify when restocking a product that was already in stock', async () => {
     mockDb.prepare.mockReturnValue({
       get:  jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 5, farmer_id: 2 }),
       run:  jest.fn(),
       all:  jest.fn().mockReturnValue([]),
     });
+
     const res = await request(app)
       .patch('/api/products/5/restock')
       .set('Authorization', `Bearer ${farmerToken}`)
       .send({ quantity: 10 });
+
     expect(res.status).toBe(200);
     await new Promise(r => setTimeout(r, 20));
     expect(mailer.sendBackInStockEmail).not.toHaveBeenCalled();
@@ -148,11 +177,18 @@ describe('PATCH /api/products/:id/restock — back-in-stock alerts', () => {
       .mockReturnValueOnce({ get: jest.fn(), run: jest.fn(), all: jest.fn() })
       .mockReturnValueOnce({ get: jest.fn(), run: jest.fn(), all: jest.fn().mockReturnValue([{ email: 'x@x.com', name: 'X' }]) })
       .mockReturnValueOnce({ get: jest.fn(), run: jest.fn(), all: jest.fn() });
+    mockDb.prepare.mockReturnValue({
+      get:  jest.fn().mockReturnValue({ id: 5, name: 'Tomatoes', quantity: 0, farmer_id: 2 }),
+      run:  jest.fn(),
+      all:  jest.fn().mockReturnValue([{ email: 'x@x.com', name: 'X' }]),
+    });
 
     const res = await request(app)
       .patch('/api/products/5/restock')
       .set('Authorization', `Bearer ${farmerToken}`)
       .send({ quantity: 5 });
     expect(res.status).toBe(200);
+
+    expect(res.status).toBe(200); // request succeeds regardless
   });
 });

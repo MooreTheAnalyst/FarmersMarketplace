@@ -149,6 +149,7 @@ router.patch('/:id/restock', auth, async (req, res) => {
   const wasOutOfStock = product.quantity === 0;
   db.prepare('UPDATE products SET quantity = quantity + ? WHERE id = ?').run(quantity, req.params.id);
 
+  // Notify subscribers if product was out of stock
   if (wasOutOfStock) {
     const subscribers = db.prepare(`
       SELECT u.email, u.name FROM stock_alerts sa

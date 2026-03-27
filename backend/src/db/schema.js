@@ -63,6 +63,10 @@ try {
   process.exit(1);
 }
 
+// Escrow columns migration
+try { db.exec(`ALTER TABLE orders ADD COLUMN escrow_balance_id TEXT`); } catch {}
+try { db.exec(`ALTER TABLE orders ADD COLUMN escrow_status TEXT DEFAULT 'none'`); } catch {}
+
 // Migrate existing DB: add columns if missing
 try { db.exec(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN image_url TEXT`); } catch {}
@@ -73,6 +77,9 @@ try { db.exec(`ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1`); } catch 
 try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN location TEXT`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_bonus_sent INTEGER DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
 
@@ -119,6 +126,9 @@ try {
     db.exec(`ALTER TABLE orders_new RENAME TO orders`);
   } else {
     db.exec(`DROP TABLE orders_new`);
+  }
+} catch {}
+
 // SQLite doesn't support ALTER COLUMN, so we use a safe workaround via a new table
 try {
   const info = db.prepare(`PRAGMA table_info(orders)`).all();
@@ -180,6 +190,18 @@ try {
   `);
 } catch {}
 
+// Idempotency keys table
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key        TEXT PRIMARY KEY,
+      response   TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+} catch (err) {
+  console.error('[DB] Failed to create idempotency_keys table:', err.message);
 // stock_alerts table
 try {
   db.exec(`

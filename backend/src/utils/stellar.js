@@ -98,4 +98,121 @@ async function getTransactions(publicKey) {
   }
 }
 
-module.exports = { isTestnet, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions };
+<<<<<<< feature/issue-85-escrow-claimable-balance
+// Create a Stellar Claimable Balance (escrow)
+// Farmer can claim immediately; Buyer can reclaim after 14 days
+async function createClaimableBalance({ senderSecret, farmerPublicKey, buyerPublicKey, amount }) {
+  const senderKeypair = StellarSdk.Keypair.fromSecret(senderSecret);
+  const senderAccount = await server.loadAccount(senderKeypair.publicKey());
+
+  const farmerClaimant = new StellarSdk.Claimant(
+    farmerPublicKey,
+    StellarSdk.Claimant.predicateUnconditional()
+  );
+  // Buyer can reclaim after 14 days (1209600 seconds)
+  const buyerClaimant = new StellarSdk.Claimant(
+    buyerPublicKey,
+    StellarSdk.Claimant.predicateNot(
+      StellarSdk.Claimant.predicateBeforeRelativeTime('1209600')
+    )
+  );
+
+  const transaction = new StellarSdk.TransactionBuilder(senderAccount, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(
+      StellarSdk.Operation.createClaimableBalance({
+        asset: StellarSdk.Asset.native(),
+        amount: amount.toFixed(7),
+        claimants: [farmerClaimant, buyerClaimant],
+      })
+    )
+    .setTimeout(30)
+    .build();
+
+  transaction.sign(senderKeypair);
+  const result = await server.submitTransaction(transaction);
+
+  // Extract the balance ID from the operation result
+  const balanceId = result.offerResults?.[0]?.balanceID
+    ?? result._links?.transaction?.href; // fallback — parse from effects
+
+  // Reliable: query the claimable balances created by this tx
+  const effects = await server.effects().forTransaction(result.hash).call();
+  const created = effects.records.find(e => e.type === 'claimable_balance_created');
+  if (!created) throw new Error('Could not determine claimable balance ID');
+
+  // The balance ID is on the claimable_balance_id field of the effect
+  const claimableBalances = await server
+    .claimableBalances()
+    .claimant(farmerPublicKey)
+    .order('desc')
+    .limit(5)
+    .call();
+
+  const balance = claimableBalances.records.find(b =>
+    b.amount === amount.toFixed(7) && b.claimants.some(c => c.destination === buyerPublicKey)
+  );
+  if (!balance) throw new Error('Claimable balance not found after creation');
+
+  return { txHash: result.hash, balanceId: balance.id };
+}
+
+// Claim a claimable balance
+async function claimBalance({ claimantSecret, balanceId }) {
+  const claimantKeypair = StellarSdk.Keypair.fromSecret(claimantSecret);
+  const claimantAccount = await server.loadAccount(claimantKeypair.publicKey());
+
+  const transaction = new StellarSdk.TransactionBuilder(claimantAccount, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(
+      StellarSdk.Operation.claimClaimableBalance({ balanceID: balanceId })
+    )
+    .setTimeout(30)
+    .build();
+
+  transaction.sign(claimantKeypair);
+  const result = await server.submitTransaction(transaction);
+  return result.hash;
+}
+
+module.exports = { isTestnet, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions, createClaimableBalance, claimBalance };
+=======
+async function getContractState(contractId, prefix = null) {
+  const sorobanRpcUrl = process.env.SOROBAN_RPC_URL || (
+    isTestnet 
+      ? 'https://soroban-testnet.stellar.org'
+      : 'https://soroban.stellar.org'
+  );
+  const sorobanServer = new StellarSdk.SorobanRpc.Server(sorobanRpcUrl);
+
+  const entries = [];
+  let hasMore = true;
+  let cursor = null;
+
+  while (hasMore) {
+    const response = await sorobanServer.getContractData(contractId, cursor);
+
+    if (response.data) {
+      const entry = {
+        key: StellarSdk.scValToNative(response.data.key, { asString: true }),
+        val: StellarSdk.scValToNative(response.data.val, { asString: true }),
+        durability: response.data.durability || 'Persistent'
+      };
+      if (!prefix || entry.key.startsWith(prefix)) {
+        entries.push(entry);
+      }
+    }
+
+    hasMore = response.latestLedger;
+    cursor = response.pagingToken;
+  }
+
+  return entries;
+}
+
+module.exports = { isTestnet, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions, getContractState };
+>>>>>>> main

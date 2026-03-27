@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { getStellarErrorMessage } from '../utils/stellarErrors';
+import { getErrorMessage } from '../utils/errorMessages';
 import { useXlmRate } from '../utils/useXlmRate';
 import StarRating from '../components/StarRating';
 
@@ -34,12 +34,6 @@ export default function ProductDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [product, setProduct] = useState(null);
-  const [qty, setQty] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-  const { usd } = useXlmRate();
 
   const [product, setProduct]   = useState(null);
   const [reviews, setReviews]   = useState([]);
@@ -47,6 +41,8 @@ export default function ProductDetail() {
   const [loading, setLoading]   = useState(false);
   const [result, setResult]     = useState(null);
   const [error, setError]       = useState('');
+  const { usd } = useXlmRate();
+  const [useEscrow, setUseEscrow] = useState(false);
   const [alertSet, setAlertSet] = useState(false);
   const [alertLoading, setAlertLoading] = useState(false);
 
@@ -73,6 +69,7 @@ export default function ProductDetail() {
     loadReviews();
   }, [id, loadReviews]);
 
+  // Load alert subscription status for buyers
   useEffect(() => {
     if (user?.role !== 'buyer') return;
     api.getMyAlert(id).then(res => setAlertSet(res.subscribed)).catch(() => {});
@@ -116,15 +113,47 @@ export default function ProductDetail() {
   async function handleBuy() {
     if (!user) return navigate('/login');
     if (user.role === 'farmer') return setError('Farmers cannot place orders');
+    
     setLoading(true);
     setError('');
+    
+    // Generate a unique idempotency key for this specific purchase attempt
+    const idempotencyKey = `buy_${user.id}_${product.id}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    
     try {
-      const res = await api.placeOrder({ product_id: product.id, quantity: qty });
+      const res = await api.placeOrder({ product_id: product.id, quantity: qty }, idempotencyKey);
       setResult(res);
     } catch (e) {
       setError(getStellarErrorMessage(e));
+      setLoading(false); // Re-enable only on error
+      const res = await api.placeOrder({ product_id: product.id, quantity: qty });
+      if (useEscrow) {
+        const escrowRes = await api.fundEscrow(res.orderId);
+        setResult({ ...res, escrow: true, balanceId: escrowRes.balanceId });
+      } else {
+        setResult(res);
+      }
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAlert() {
+    setAlertLoading(true);
+    try {
+      if (alertSet) {
+        await api.removeStockAlert(id);
+        setAlertSet(false);
+      } else {
+        await api.setStockAlert(id);
+        setAlertSet(true);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAlertLoading(false);
     }
   }
 
@@ -147,7 +176,7 @@ export default function ProductDetail() {
       loadReviews();
       api.getProduct(id).then(res => setProduct(res.data ?? res)).catch(() => {});
     } catch (e) {
-      setReviewError(e.message);
+      setReviewError(getErrorMessage(e));
     } finally {
       setReviewLoading(false);
     }
@@ -157,11 +186,27 @@ export default function ProductDetail() {
     return (
       <div style={s.page}>
         <div style={s.card}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>{result.escrow ? '🔒' : '✅'}</div>
           <div style={s.success}>
-            <strong>Payment successful!</strong>
-            <p style={{ marginTop: 8, fontSize: 14 }}>Order #{result.orderId} · {result.totalPrice} XLM paid</p>
-            <p style={{ marginTop: 4, fontSize: 12, wordBreak: 'break-all', color: '#555' }}>TX: {result.txHash}</p>
+            {result.escrow ? (
+              <>
+                <strong>Payment held in escrow!</strong>
+                <p style={{ marginTop: 8, fontSize: 14 }}>Order #{result.orderId} · {result.totalPrice} XLM locked in Stellar Claimable Balance</p>
+                <p style={{ marginTop: 4, fontSize: 12, color: '#555' }}>
+                  Balance ID:{' '}
+                  <a href={`https://stellar.expert/explorer/testnet/claimable-balance/${result.balanceId}`} target="_blank" rel="noreferrer" style={{ color: '#2d6a4f', wordBreak: 'break-all' }}>
+                    {result.balanceId}
+                  </a>
+                </p>
+                <p style={{ marginTop: 4, fontSize: 12, color: '#888' }}>The farmer can claim once delivery is confirmed. You can reclaim after 14 days if undelivered.</p>
+              </>
+            ) : (
+              <>
+                <strong>Payment successful!</strong>
+                <p style={{ marginTop: 8, fontSize: 14 }}>Order #{result.orderId} · {result.totalPrice} XLM paid</p>
+                <p style={{ marginTop: 4, fontSize: 12, wordBreak: 'break-all', color: '#555' }}>TX: {result.txHash}</p>
+              </>
+            )}
           </div>
           <button style={{ ...s.btn, marginTop: 20, background: '#555' }} onClick={() => navigate('/marketplace')}>
             Back to Marketplace
@@ -215,6 +260,19 @@ export default function ProductDetail() {
         <div style={s.total}>Total: <strong>{total} XLM</strong></div>
         {error && <div style={s.err}>{error}</div>}
 
+        <button 
+          style={{ ...s.btn, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }} 
+          onClick={handleBuy} 
+          disabled={loading}
+        >
+          {loading && <div className="spinner-sm" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />}
+          {loading ? 'Processing...' : `Buy Now · ${total} XLM`}
+        </button>
+
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          .spinner-sm { display: inline-block; }
+        `}</style>
         {product.quantity === 0 ? (
           <div>
             <div style={{ color: '#c0392b', fontWeight: 600, marginBottom: 12 }}>⚠️ Out of stock</div>
@@ -232,6 +290,17 @@ export default function ProductDetail() {
           <button style={s.btn} onClick={handleBuy} disabled={loading}>
             {loading ? 'Processing payment...' : `Buy Now · ${total} XLM`}
           </button>
+          <>
+            {user?.role === 'buyer' && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 14, cursor: 'pointer' }}>
+                <input type="checkbox" checked={useEscrow} onChange={e => setUseEscrow(e.target.checked)} />
+                🔒 Use Escrow Payment (funds held until delivery, claimable by farmer after delivery)
+              </label>
+            )}
+            <button style={s.btn} onClick={handleBuy} disabled={loading}>
+              {loading ? 'Processing payment...' : `${useEscrow ? '🔒 Pay to Escrow' : 'Buy Now'} · ${total} XLM`}
+            </button>
+          </>
         )}
       </div>
 
