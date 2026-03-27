@@ -97,7 +97,6 @@ export const api = {
   getMyProducts: () => request('/products/mine/list'),
   deleteProduct: (id) => request(`/products/${id}`, { method: 'DELETE' }),
 
-  // Upload a product image — returns { imageUrl }
   uploadProductImage: (file) => {
     const form = new FormData();
     form.append('image', file);
