@@ -38,4 +38,14 @@ Date:     ${new Date().toUTCString()}
   ]);
 }
 
-module.exports = { sendOrderEmails };
+async function sendLowStockAlert({ product, farmer }) {
+  if (!process.env.SMTP_HOST) return;
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: farmer.email,
+    subject: `⚠️ Low Stock Alert – ${product.name}`,
+    text: `Hi ${farmer.name},\n\nYour product "${product.name}" is running low on stock.\n\nCurrent quantity: ${product.quantity} ${product.unit}\nThreshold: ${product.low_stock_threshold} ${product.unit}\n\nPlease restock or update your listing.\n\nFarmers Marketplace`,
+  });
+}
+
+module.exports = { sendOrderEmails, sendLowStockAlert };
