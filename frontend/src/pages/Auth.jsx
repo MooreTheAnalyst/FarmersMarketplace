@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { validateLogin, validateRegister, validatePassword } from '../utils/validation';
+import { getErrorMessage } from '../utils/errorMessages';
 
 const s = {
   wrap: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -65,7 +66,7 @@ export function LoginPage() {
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
-      setFormError(err.message);
+      setFormError(getErrorMessage(err));
     }
   }
 
@@ -129,7 +130,7 @@ export function RegisterPage() {
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
-      setFormError(err.message);
+      setFormError(getErrorMessage(err));
     }
   }
 

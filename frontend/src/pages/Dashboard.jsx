@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { validateProduct } from '../utils/validation';
+import { getErrorMessage } from '../utils/errorMessages';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE_MB = 5;
@@ -142,7 +143,7 @@ export default function Dashboard() {
         setAvatarFile(null);
       } catch (err) {
         setAvatarUploading(false);
-        setProfileMsg({ type: 'err', text: `Avatar upload failed: ${err.message}` });
+        setProfileMsg({ type: 'err', text: `Avatar upload failed: ${getErrorMessage(err)}` });
         return;
       }
       setAvatarUploading(false);
@@ -157,7 +158,7 @@ export default function Dashboard() {
       setProfile({ bio: res.data.bio || '', location: res.data.location || '', avatar_url: res.data.avatar_url || '' });
       setProfileMsg({ type: 'ok', text: 'Profile updated' });
     } catch (err) {
-      setProfileMsg({ type: 'err', text: err.message });
+      setProfileMsg({ type: 'err', text: getErrorMessage(err) });
     }
   }
 
@@ -180,7 +181,7 @@ export default function Dashboard() {
         setImageUrl(res.imageUrl);
       } catch (err) {
         setUploading(false);
-        setMsg({ type: 'err', text: `Image upload failed: ${err.message}` });
+        setMsg({ type: 'err', text: `Image upload failed: ${getErrorMessage(err)}` });
         return;
       }
       setUploading(false);
@@ -198,7 +199,7 @@ export default function Dashboard() {
       removeImage();
       load();
     } catch (err) {
-      setMsg({ type: 'err', text: err.message });
+      setMsg({ type: 'err', text: getErrorMessage(err) });
     }
   }
 
@@ -215,7 +216,7 @@ export default function Dashboard() {
       setRestockVals({ ...restockVals, [id]: '' });
       load();
     } catch (err) {
-      alert(err.message);
+      alert(getErrorMessage(err));
   async function handleStatusUpdate(orderId, status) {
     try {
       await api.updateOrderStatus(orderId, status);

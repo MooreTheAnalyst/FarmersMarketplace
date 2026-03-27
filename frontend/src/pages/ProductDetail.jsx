@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { getStellarErrorMessage } from '../utils/stellarErrors';
+import { getErrorMessage } from '../utils/errorMessages';
 import { useXlmRate } from '../utils/useXlmRate';
 import StarRating from '../components/StarRating';
 
@@ -98,7 +98,7 @@ export default function ProductDetail() {
       const res = await api.placeOrder({ product_id: product.id, quantity: qty });
       setResult(res);
     } catch (e) {
-      setError(getStellarErrorMessage(e));
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -123,7 +123,7 @@ export default function ProductDetail() {
       loadReviews();
       api.getProduct(id).then(res => setProduct(res.data ?? res)).catch(() => {});
     } catch (e) {
-      setReviewError(e.message);
+      setReviewError(getErrorMessage(e));
     } finally {
       setReviewLoading(false);
     }
