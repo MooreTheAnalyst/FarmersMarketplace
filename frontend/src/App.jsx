@@ -1,8 +1,10 @@
 import React, { useEffect, useContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { FavoritesProvider } from './context/FavoritesContext';
 import { LoadingProvider, LoadingContext } from './context/LoadingContext';
 import { setLoadingCallback, setLogoutCallback } from './api/client';
+import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
 import LoadingSpinner from './components/LoadingSpinner';
 import { LoginPage, RegisterPage } from './pages/Auth';
@@ -14,6 +16,7 @@ import Orders from './pages/Orders';
 import FarmerProfile from './pages/FarmerProfile';
 
 import AdminDashboard from './pages/AdminDashboard';
+import AddressBook from './pages/AddressBook';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -56,6 +59,7 @@ function AppContent() {
           <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
           <Route path="/admin" element={<PrivateRoute role="admin"><AdminDashboard /></PrivateRoute>} />
           <Route path="/farmer/:id" element={<FarmerProfile />} />
+          <Route path="/addresses" element={<PrivateRoute role="buyer"><AddressBook /></PrivateRoute>} />
         </Routes>
       </div>
     </>
@@ -64,10 +68,19 @@ function AppContent() {
 
 export default function App() {
   return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <LoadingProvider>
+          <AppContent />
+        </LoadingProvider>
+      </AuthProvider>
+    </ErrorBoundary>
     <AuthProvider>
-      <LoadingProvider>
-        <AppContent />
-      </LoadingProvider>
+      <FavoritesProvider>
+        <LoadingProvider>
+          <AppContent />
+        </LoadingProvider>
+      </FavoritesProvider>
     </AuthProvider>
   );
 }

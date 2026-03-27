@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { body, validationResult } = require('express-validator');
 
 const WEAK_PASSWORDS = new Set([
   'password', 'password1', 'Password1', 'Password1!',
@@ -19,9 +20,18 @@ function validate(schema) {
         details,
       });
     }
-    req.body = result.data; // use coerced/parsed values
+    req.body = result.data;
     next();
   };
+}
+
+// express-validator error handler middleware
+function handle(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, message: errors.array()[0].msg, code: 'validation_error' });
+  }
+  next();
 }
 
 const schemas = {
@@ -55,6 +65,7 @@ const schemas = {
   order: validate(z.object({
     product_id: z.coerce.number().int().positive('product_id must be a positive integer'),
     quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
+    address_id: z.coerce.number().int().positive().optional(),
   })),
 
   sendXLM: validate(z.object({
@@ -67,6 +78,18 @@ const schemas = {
     status: z.enum(['processing', 'shipped', 'delivered'], {
       errorMap: () => ({ message: 'status must be one of: processing, shipped, delivered' }),
     }),
+  })),
+
+  farmerProfile: validate(z.object({
+    bio: z.string().max(500, 'bio must be 500 characters or fewer').optional(),
+    location: z.string().max(100, 'location must be 100 characters or fewer').optional(),
+    avatar_url: z.string().optional().nullable(),
+  })),
+
+  review: validate(z.object({
+    order_id: z.coerce.number().int().positive('order_id must be a positive integer'),
+    rating: z.coerce.number().int().min(1).max(5, 'rating must be an integer between 1 and 5'),
+    comment: z.string().max(1000, 'comment must be 1000 characters or fewer').optional(),
   })),
   register: [
     body('name').trim().notEmpty().withMessage('name is required'),
@@ -110,6 +133,8 @@ const schemas = {
         throw new Error('avatar_url must be a valid upload path');
       return true;
     }),
+    handle,
+  ],
   review: [
     body('order_id').isInt({ gt: 0 }).withMessage('order_id must be a positive integer'),
     body('rating').isInt({ min: 1, max: 5 }).withMessage('rating must be an integer between 1 and 5'),

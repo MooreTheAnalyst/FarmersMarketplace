@@ -3,6 +3,10 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { validateLogin, validateRegister, validatePassword } from '../utils/validation';
+<<<<<<< feature/human-friendly-errors
+import { getErrorMessage } from '../utils/errorMessages';
+=======
+>>>>>>> main
 
 const s = {
   wrap: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -65,7 +69,11 @@ export function LoginPage() {
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
+<<<<<<< feature/human-friendly-errors
+      setFormError(getErrorMessage(err));
+=======
       setFormError(err.message);
+>>>>>>> main
     }
   }
 
@@ -121,6 +129,11 @@ export function RegisterPage() {
     if (errors[field]) setErrors(e => ({ ...e, [field]: '' }));
   }
 
+  function handleChange(field, value) {
+    setForm(f => ({ ...f, [field]: value }));
+    if (errors[field]) setErrors(e => ({ ...e, [field]: '' }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setFormError('');
@@ -131,7 +144,11 @@ export function RegisterPage() {
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
+<<<<<<< feature/human-friendly-errors
+      setFormError(getErrorMessage(err));
+=======
       setFormError(err.message);
+>>>>>>> main
     }
   }
 

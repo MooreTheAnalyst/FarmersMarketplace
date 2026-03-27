@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { validateProduct } from '../utils/validation';
+import { getErrorMessage } from '../utils/errorMessages';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE_MB = 5;
@@ -25,6 +26,7 @@ const s = {
   product: { borderBottom: '1px solid #eee', padding: '12px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   del: { background: '#fee', color: '#c0392b', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 },
   msg: { padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 14 },
+  address: { fontSize: 12, color: '#888', marginTop: 4, fontStyle: 'italic' },
   // image upload
   uploadZone: {
     border: '2px dashed #b7e4c7', borderRadius: 10, padding: '18px 12px',
@@ -36,6 +38,9 @@ const s = {
   removeImg: { background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 12, marginBottom: 12 },
   imgErr: { color: '#c0392b', fontSize: 12, marginBottom: 8 },
   uploading: { color: '#888', fontSize: 12, marginBottom: 8 },
+  csvBtn: { background: '#218c74', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontWeight: 600, marginRight: 8 },
+  csvInput: { display: 'none' },
+  csvResult: { padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 14 },
   productThumb: { width: 36, height: 36, objectFit: 'cover', borderRadius: 6, marginRight: 10, verticalAlign: 'middle' },
 };
 
@@ -52,6 +57,7 @@ export default function Dashboard() {
   const [formErrors, setFormErrors] = useState({});
   const [sales, setSales] = useState([]);
   const [salesMsg, setSalesMsg] = useState({});
+  const [formErrors, setFormErrors] = useState({});
 
   // image state
   const [imageFile, setImageFile] = useState(null);
@@ -69,6 +75,12 @@ export default function Dashboard() {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef(null);
+
+  // CSV upload state
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvResult, setCsvResult] = useState(null);
+  const csvInputRef = useRef(null);
 
   async function load() {
     try {
@@ -144,7 +156,7 @@ export default function Dashboard() {
         setAvatarFile(null);
       } catch (err) {
         setAvatarUploading(false);
-        setProfileMsg({ type: 'err', text: `Avatar upload failed: ${err.message}` });
+        setProfileMsg({ type: 'err', text: `Avatar upload failed: ${getErrorMessage(err)}` });
         return;
       }
       setAvatarUploading(false);
@@ -159,13 +171,34 @@ export default function Dashboard() {
       setProfile({ bio: res.data.bio || '', location: res.data.location || '', avatar_url: res.data.avatar_url || '' });
       setProfileMsg({ type: 'ok', text: 'Profile updated' });
     } catch (err) {
-      setProfileMsg({ type: 'err', text: err.message });
+      setProfileMsg({ type: 'err', text: getErrorMessage(err) });
     }
   }
 
   async function handleAdd(e) {
     e.preventDefault();
     setMsg(null);
+    setFormErrors({});
+
+    // Validate price and quantity
+    const errors = {};
+    const price = parseFloat(form.price);
+    const quantity = parseInt(form.quantity, 10);
+
+    if (!form.name || !form.name.trim()) {
+      errors.name = 'Product name is required';
+    }
+    if (!form.price || isNaN(price) || price <= 0) {
+      errors.price = 'Price must be a positive number';
+    }
+    if (!form.quantity || isNaN(quantity) || quantity <= 0) {
+      errors.quantity = 'Quantity must be a positive integer';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
 
     // Client-side validation
     const errs = validateProduct(form);
@@ -182,7 +215,7 @@ export default function Dashboard() {
         setImageUrl(res.imageUrl);
       } catch (err) {
         setUploading(false);
-        setMsg({ type: 'err', text: `Image upload failed: ${err.message}` });
+        setMsg({ type: 'err', text: `Image upload failed: ${getErrorMessage(err)}` });
         return;
       }
       setUploading(false);
@@ -200,7 +233,7 @@ export default function Dashboard() {
       removeImage();
       load();
     } catch (err) {
-      setMsg({ type: 'err', text: err.message });
+      setMsg({ type: 'err', text: getErrorMessage(err) });
     }
   }
 
@@ -218,6 +251,10 @@ export default function Dashboard() {
       load();
     } catch (err) {
       alert(err.message);
+    }
+  }
+
+      alert(getErrorMessage(err));
   async function handleStatusUpdate(orderId, status) {
     try {
       await api.updateOrderStatus(orderId, status);
@@ -226,6 +263,44 @@ export default function Dashboard() {
     } catch (e) {
       setSalesMsg(prev => ({ ...prev, [orderId]: { type: 'err', text: e.message } }));
     }
+  }
+
+  async function handleCsvUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.csv')) {
+      setCsvResult({ type: 'err', text: 'Please upload a .csv file' });
+      return;
+    }
+    setCsvFile(file);
+    setCsvUploading(true);
+    setCsvResult(null);
+    try {
+      const res = await api.bulkUploadProducts(file);
+      setCsvResult({
+        type: 'ok',
+        text: `Upload complete: ${res.created} created, ${res.skipped} skipped, ${res.errors?.length || 0} errors`,
+        details: res.errors,
+      });
+      load();
+    } catch (err) {
+      setCsvResult({ type: 'err', text: err.message });
+    } finally {
+      setCsvUploading(false);
+      setCsvFile(null);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  }
+
+  function downloadCsvTemplate() {
+    const csv = 'name,description,price,quantity,unit,category\nOrganic Tomatoes,Fresh organic tomatoes,2.50,100,kg,vegetables\nFree Range Eggs,Farm fresh eggs,5.00,50,dozen,dairy\n';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'product-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -296,6 +371,11 @@ export default function Dashboard() {
               <div key={key}>
                 <label style={s.label}>{label}</label>
                 <input
+                  style={{ ...s.input, borderColor: formErrors[key] ? '#c0392b' : '#ddd' }}
+                  value={form[key]}
+                  onChange={e => {
+                    setForm({ ...form, [key]: e.target.value });
+                    if (formErrors[key]) setFormErrors({ ...formErrors, [key]: undefined });
                   style={formErrors[key] ? s.inputErr : s.input}
                   value={form[key]}
                   type={key === 'price' || key === 'quantity' ? 'number' : 'text'}
@@ -306,7 +386,11 @@ export default function Dashboard() {
                     if (formErrors[key]) setFormErrors(fe => ({ ...fe, [key]: '' }));
                   }}
                   required={key !== 'unit'}
+                  type={key === 'price' || key === 'quantity' ? 'number' : undefined}
+                  step={key === 'price' ? '0.01' : key === 'quantity' ? '1' : undefined}
+                  min={key === 'price' || key === 'quantity' ? '0' : undefined}
                 />
+                {formErrors[key] && <div style={{ ...s.imgErr, marginTop: -8, marginBottom: 4 }}>{formErrors[key]}</div>}
                 {formErrors[key] && <div style={s.fieldErr} role="alert">{formErrors[key]}</div>}
               </div>
             ))}
@@ -356,7 +440,7 @@ export default function Dashboard() {
 
             {imageErr && <div style={s.imgErr}>{imageErr}</div>}
 
-            <button style={s.btn} type="submit" disabled={uploading}>
+            <button style={s.btn} type="submit" disabled={uploading || Object.keys(formErrors).length > 0}>
               {uploading ? 'Uploading...' : 'List Product'}
             </button>
           </form>
@@ -398,6 +482,46 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* CSV Bulk Upload */}
+      <div style={{ ...s.card, marginTop: 24 }}>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>📤 Bulk Upload Products</h3>
+        <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
+          Upload multiple products at once using a CSV file. Maximum 500 rows per upload.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button style={s.csvBtn} onClick={() => csvInputRef.current?.click()} disabled={csvUploading}>
+            {csvUploading ? 'Uploading...' : '📁 Upload CSV'}
+          </button>
+          <button style={{ ...s.csvBtn, background: '#555' }} onClick={downloadCsvTemplate}>
+            📥 Download Template
+          </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            style={s.csvInput}
+            onChange={handleCsvUpload}
+          />
+        </div>
+        {csvResult && (
+          <div style={{ ...s.csvResult, background: csvResult.type === 'ok' ? '#d8f3dc' : '#fee', color: csvResult.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+            {csvResult.text}
+            {csvResult.details && csvResult.details.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                <strong>Errors:</strong>
+                <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                  {csvResult.details.slice(0, 10).map((err, i) => (
+                    <li key={i}>Row {err.row}: {err.error}</li>
+                  ))}
+                  {csvResult.details.length > 10 && <li>...and {csvResult.details.length - 10} more errors</li>}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Profile edit */}
       <div style={{ ...s.card, marginTop: 24 }}>
         <h3 style={{ marginBottom: 16, color: '#333' }}>My Farmer Profile</h3>
@@ -470,6 +594,12 @@ export default function Dashboard() {
                     <div style={{ fontSize: 13, color: '#666' }}>
                       {o.quantity} units · {parseFloat(o.total_price).toFixed(2)} XLM · by {o.buyer_name}
                     </div>
+                    {o.address_label && (
+                      <div style={s.address}>
+                        📍 {o.address_label}: {o.address_street}, {o.address_city}, {o.address_country}
+                        {o.address_postal_code ? ` ${o.address_postal_code}` : ''}
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: '#aaa' }}>{new Date(o.created_at).toLocaleDateString()}</div>
                     {m && <div style={{ fontSize: 12, color: m.type === 'ok' ? '#2d6a4f' : '#c0392b', marginTop: 4 }}>{m.text}</div>}
                   </div>
