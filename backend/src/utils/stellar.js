@@ -110,4 +110,37 @@ async function getTransactions(publicKey) {
   }
 }
 
-module.exports = { isTestnet, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions };
+async function getContractState(contractId, prefix = null) {
+  const sorobanRpcUrl = process.env.SOROBAN_RPC_URL || (
+    isTestnet 
+      ? 'https://soroban-testnet.stellar.org'
+      : 'https://soroban.stellar.org'
+  );
+  const sorobanServer = new StellarSdk.SorobanRpc.Server(sorobanRpcUrl);
+
+  const entries = [];
+  let hasMore = true;
+  let cursor = null;
+
+  while (hasMore) {
+    const response = await sorobanServer.getContractData(contractId, cursor);
+
+    if (response.data) {
+      const entry = {
+        key: StellarSdk.scValToNative(response.data.key, { asString: true }),
+        val: StellarSdk.scValToNative(response.data.val, { asString: true }),
+        durability: response.data.durability || 'Persistent'
+      };
+      if (!prefix || entry.key.startsWith(prefix)) {
+        entries.push(entry);
+      }
+    }
+
+    hasMore = response.latestLedger;
+    cursor = response.pagingToken;
+  }
+
+  return entries;
+}
+
+module.exports = { isTestnet, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions, getContractState };

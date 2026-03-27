@@ -76,6 +76,30 @@ router.post('/', auth, validate.order, async (req, res) => {
     markOrderPaid();
 
     const farmer = db.prepare('SELECT id, name, email, stellar_public_key FROM users WHERE id = ?').get(product.farmer_id);
+    // Referral Bonus Logic
+    if (buyer.referred_by && buyer.referral_bonus_sent === 0) {
+      const referrer = db.prepare('SELECT stellar_public_key FROM users WHERE id = ?').get(buyer.referred_by);
+      const treasurySecret = process.env.MARKETPLACE_TREASURY_SECRET;
+      
+      if (referrer && treasurySecret) {
+        try {
+          await sendPayment({
+            senderSecret: treasurySecret,
+            receiverPublicKey: referrer.stellar_public_key,
+            amount: 1.0,
+            memo: `Referral Bonus: ${buyer.name}`.slice(0, 28)
+          });
+          db.prepare('UPDATE users SET referral_bonus_sent = 1 WHERE id = ?').run(buyer.id);
+          console.log(`[Referral] Sent 1 XLM bonus to user ${buyer.referred_by} for referring ${buyer.id}`);
+        } catch (err) {
+          console.error('[Referral] Failed to send bonus:', err.message);
+        }
+      } else if (!treasurySecret) {
+        console.warn('[Referral] MARKETPLACE_TREASURY_SECRET not set, skipping bonus payout');
+      }
+    }
+
+    const farmer = db.prepare('SELECT * FROM users WHERE id = ?').get(product.farmer_id);
     sendOrderEmails({
       order: { id: orderId, quantity, total_price: totalPrice, stellar_tx_hash: txHash },
       product, buyer, farmer,

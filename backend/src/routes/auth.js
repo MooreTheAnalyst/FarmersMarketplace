@@ -60,14 +60,27 @@ function rotateRefreshToken(userId, oldRawToken) {
 
 // POST /api/auth/register
 router.post('/register', validate.register, async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, ref } = req.body;
   try {
     const hashed = await bcrypt.hash(password, 12);
     const wallet = createWallet();
 
+    // Generate unique referral code
+    let referralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+    // Check if it's unique (highly likely with 4 bytes HEX, but let's be safe or just use it)
+    // For simplicity in this demo, we'll just use it. 
+    // In production, you'd loop until unique.
+
+    // Find referrer if ref provided
+    let referredBy = null;
+    if (ref) {
+      const referrer = db.prepare('SELECT id FROM users WHERE referral_code = ?').get(ref);
+      if (referrer) referredBy = referrer.id;
+    }
+
     const result = db.prepare(
-      'INSERT INTO users (name, email, password, role, stellar_public_key, stellar_secret_key) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(name, email, hashed, role, wallet.publicKey, wallet.secretKey);
+      'INSERT INTO users (name, email, password, role, stellar_public_key, stellar_secret_key, referral_code, referred_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(name, email, hashed, role, wallet.publicKey, wallet.secretKey, referralCode, referredBy);
 
     const userId = result.lastInsertRowid;
     const accessToken = signAccessToken({ id: userId, role });
@@ -77,7 +90,7 @@ router.post('/register', validate.register, async (req, res) => {
     res.cookie('refreshToken', rawRefresh, COOKIE_OPTIONS);
     res.json({
       token: accessToken,
-      user: { id: userId, name, email, role, publicKey: wallet.publicKey },
+      user: { id: userId, name, email, role, publicKey: wallet.publicKey, referralCode },
     });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Email already exists' });

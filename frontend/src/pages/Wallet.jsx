@@ -161,6 +161,37 @@ export default function Wallet() {
         )}
       </div>
 
+      {/* Referral Program Card */}
+      <div style={s.card}>
+        <h3 style={{ marginBottom: 4, color: '#333' }}>🎁 Referral Program</h3>
+        <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Earn 1 XLM for every friend who joins and places their first order.</p>
+        
+        <div style={{ background: '#f8f9fa', padding: 16, borderRadius: 8, border: '1px dashed #ced4da' }}>
+          <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4, textTransform: 'uppercase', fontWeight: 600 }}>Your Referral Code</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#2d6a4f', fontFamily: 'monospace', letterSpacing: 1 }}>{wallet?.referralCode || '—'}</div>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(wallet?.referralCode);
+                alert('Code copied!');
+              }}
+              style={{ padding: '4px 12px', fontSize: 12, borderRadius: 6, border: '1px solid #2d6a4f', background: 'none', color: '#2d6a4f', cursor: 'pointer' }}
+            >Copy Code</button>
+          </div>
+          
+          <div style={{ marginTop: 16 }}>
+            <button 
+              onClick={() => {
+                const link = `${window.location.origin}/register?ref=${wallet?.referralCode}`;
+                navigator.clipboard.writeText(link);
+                alert('Referral link copied!');
+              }}
+              style={{ ...s.btn, marginTop: 0, width: '100%' }}
+            >🔗 Copy Referral Link</button>
+          </div>
+        </div>
+      </div>
+
       {/* Send XLM card */}
       <div style={s.card}>
         <h3 style={{ marginBottom: 4, color: '#333' }}>↑ Send XLM</h3>
