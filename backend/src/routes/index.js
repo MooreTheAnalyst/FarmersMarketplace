@@ -87,7 +87,18 @@ router.use('/api/v1',          require('./reviews'));
 router.use('/api/v1/rates',  require('./rates'));
 router.use('/api/rates',     require('./rates'));
 
-router.get('/api/v1/health', (_, res) => res.json({ status: 'ok', version: 'v1' }));
+// Legacy routes
+router.use('/api/auth',     require('./auth'));
+router.use('/api/products', require('./products'));
+router.use('/api/orders',   require('./orders'));
+router.use('/api/wallet',   require('./wallet'));
+router.use('/api/contracts', require('./contracts'));
+
+router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
+router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
+router.get('/api/v1/health', (_, res) => res.json({ status: 'ok', version: 'v1' });
+
+module.exports = router;
 
 // Non-versioned routes (used by frontend)
 router.use('/api/auth',      require('./auth'));
