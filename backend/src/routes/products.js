@@ -50,7 +50,7 @@ router.get('/', (req, res) => {
      ORDER BY p.created_at DESC LIMIT ? OFFSET ?`
   ).all(...dataParams, limit, offset);
 
-  res.json({ success: true, data: products, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+  res.json({ success: true, data: products, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
 // GET /api/products/search?q=tomato - FTS5 full-text search

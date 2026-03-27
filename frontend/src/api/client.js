@@ -80,17 +80,20 @@ async function request(path, options = {}, retry = true) {
   return data;
 }
 
+/** Build a query string from a params object, omitting empty/null values. */
+function toQs(params) {
+  const entries = Object.entries(params).filter(([, v]) => v !== '' && v != null);
+  return entries.length ? '?' + new URLSearchParams(entries).toString() : '';
+}
+
 export const api = {
   register: (body) => request('/auth/register', { method: 'POST', body }),
   login: (body) => request('/auth/login', { method: 'POST', body }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   refresh: () => refreshAccessToken(),
 
-  getProducts: (filters = {}) => {
-    const entries = Object.entries(filters).filter(([, v]) => v !== '' && v != null);
-    const qs = new URLSearchParams(entries).toString();
-    return request(`/products${qs ? `?${qs}` : ''}`);
-  },
+  // filters may include: category, minPrice, maxPrice, seller, available, page, limit
+  getProducts: (filters = {}) => request(`/products${toQs(filters)}`),
   getCategories: () => request('/products/categories'),
   getProduct: (id) => request(`/products/${id}`),
   createProduct: (body) => request('/products', { method: 'POST', body }),
@@ -106,6 +109,10 @@ export const api = {
   searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
 
   placeOrder: (body) => request('/orders', { method: 'POST', body }),
+  // params may include: status, page, limit
+  getOrders: (params = {}) => request(`/orders${toQs(params)}`),
+  // params may include: page, limit
+  getSales: (params = {}) => request(`/orders/sales${toQs(params)}`),
   getOrders: (status) => request(`/orders${status ? `?status=${status}` : ''}`),
   getSales: () => request('/orders/sales'),
   updateOrderStatus: (id, status) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
