@@ -11,9 +11,21 @@ import Spinner from '../components/Spinner';
 import { useTranslation } from 'react-i18next';
 
 const s = {
-  page: { maxWidth: 640, margin: '40px auto', padding: 24 },
-  card: { background: '#fff', borderRadius: 12, padding: 32, boxShadow: '0 1px 8px #0001', marginBottom: 24 },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 16 },
+  page: { maxWidth: 640, margin: "40px auto", padding: 16 },
+  card: {
+    background: "#fff",
+    borderRadius: 12,
+    padding: 24,
+    boxShadow: "0 1px 8px #0001",
+    marginBottom: 24,
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 16,
+    marginBottom: 16,
+  },
   headerContent: { flex: 1 },
   favoriteBtn: { background: 'none', border: 'none', fontSize: 32, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 48, height: 48, flexShrink: 0 },
   name:       { fontSize: 28, fontWeight: 700, color: '#2d6a4f', marginBottom: 4 },
@@ -22,8 +34,8 @@ const s = {
   price:      { fontSize: 24, fontWeight: 700, color: '#2d6a4f', marginBottom: 8 },
   row:        { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 },
   input:      { width: 80, padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 16, textAlign: 'center' },
-  btn:        { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 28px', cursor: 'pointer', fontWeight: 600, fontSize: 16 },
-  btnSm:      { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer', fontWeight: 600, fontSize: 14 },
+  btn:        { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 28px', cursor: 'pointer', fontWeight: 600, fontSize: 16, minHeight: 44 },
+  btnSm:      { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer', fontWeight: 600, fontSize: 14, minHeight: 44 },
   total:      { background: '#f0faf4', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 15 },
   err:        { color: '#c0392b', fontSize: 14, marginTop: 8 },
   success:    { background: '#d8f3dc', borderRadius: 8, padding: 16, color: '#2d6a4f' },
@@ -83,6 +95,11 @@ export default function ProductDetail() {
   const [pathEstimate, setPathEstimate] = useState(null); // { sourceAmount, sourceCode }
   const [pathEstimateLoading, setPathEstimateLoading] = useState(false);
   const [pathEstimateError, setPathEstimateError] = useState('');
+  // Availability calendar
+  const [calendar, setCalendar] = useState([]);
+  const [selectedWeek, setSelectedWeek] = useState(null); // YYYY-MM-DD of chosen week
+  // Platform fee state
+  const [feeInfo, setFeeInfo] = useState(null); // { feePercent, feeAmount, farmerAmount }
 
   const loadReviews = useCallback(async () => {
     try { const res = await api.getProductReviews(id); setReviews(res.data ?? []); }
@@ -96,6 +113,13 @@ export default function ProductDetail() {
       const imgs = res.data ?? [];
       setImages(imgs);
       if (imgs.length > 0) setActiveImg(0);
+    }).catch(() => {});
+    api.getCalendar(id).then(res => {
+      const weeks = res.data ?? [];
+      setCalendar(weeks);
+      // Default to first available week
+      const first = weeks.find(w => w.available);
+      if (first) setSelectedWeek(first.week_start);
     }).catch(() => {});
   }, [id, loadReviews, navigate]);
 
@@ -154,6 +178,13 @@ export default function ProductDetail() {
 
   const subtotal = (product.price * qty).toFixed(2);
   const total = couponResult ? couponResult.final_total.toFixed(2) : subtotal;
+
+  // Fetch fee info whenever total changes
+  const totalNum = parseFloat(total);
+  React.useEffect(() => {
+    if (!totalNum) return;
+    api.getFeePreview(totalNum).then(r => setFeeInfo(r)).catch(() => setFeeInfo(null));
+  }, [total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleApplyCoupon() {
     if (!couponCode.trim()) return;
@@ -385,6 +416,13 @@ export default function ProductDetail() {
           ) : (
             <>Total: <strong>{total} XLM</strong></>
           )}
+          {feeInfo && feeInfo.feeAmount > 0 && (
+            <div style={{ marginTop: 8, fontSize: 12, color: '#888', borderTop: '1px solid #e0e0e0', paddingTop: 6 }}>
+              <div>Subtotal: {total} XLM</div>
+              <div>Platform fee ({feeInfo.feePercent}%): −{feeInfo.feeAmount.toFixed(7)} XLM</div>
+              <div style={{ fontWeight: 600, color: '#2d6a4f' }}>Farmer receives: {feeInfo.farmerAmount.toFixed(7)} XLM</div>
+            </div>
+          )}
         </div>
 
         {/* Path payment asset selector */}
@@ -428,6 +466,32 @@ export default function ProductDetail() {
         )}
         {error && <div style={s.err}>{error}</div>}
 
+        {/* Availability Calendar */}
+        {calendar.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#333', marginBottom: 8 }}>📅 Weekly Availability</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {calendar.map(w => (
+                <button
+                  key={w.week_start}
+                  disabled={!w.available}
+                  onClick={() => w.available && setSelectedWeek(w.week_start)}
+                  style={{
+                    padding: '5px 10px', borderRadius: 6, fontSize: 12, cursor: w.available ? 'pointer' : 'not-allowed',
+                    border: selectedWeek === w.week_start ? '2px solid #2d6a4f' : '1px solid #ddd',
+                    background: !w.available ? '#f5f5f5' : selectedWeek === w.week_start ? '#d8f3dc' : '#fff',
+                    color: !w.available ? '#bbb' : '#333',
+                    fontWeight: selectedWeek === w.week_start ? 700 : 400,
+                  }}
+                >
+                  {w.available ? '' : '✗ '}{new Date(w.week_start + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </button>
+              ))}
+            </div>
+            {selectedWeek && <div style={{ fontSize: 12, color: '#2d6a4f', marginTop: 4 }}>Week of {selectedWeek} selected</div>}
+          </div>
+        )}
+
         {product.quantity === 0 ? (
           <div>
             <div style={{ color: '#c0392b', fontWeight: 600, marginBottom: 12 }}>{t('productDetail.outOfStock')}</div>
@@ -446,7 +510,7 @@ export default function ProductDetail() {
               </label>
             )}
             <button style={{ ...s.btn, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-              onClick={handleBuy} disabled={loading}>
+              onClick={handleBuy} disabled={loading || (calendar.length > 0 && selectedWeek && !calendar.find(w => w.week_start === selectedWeek)?.available)}>
               {loading && <div className="spinner-sm" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />}
               {loading ? t('productDetail.processing') : `${useEscrow ? t('productDetail.payToEscrow') : t('productDetail.buyNow')} · ${sourceAsset && pathEstimate ? `~${pathEstimate.sourceAmount.toFixed(4)} ${pathEstimate.sourceCode}` : `${total} XLM`}`}
             </button>

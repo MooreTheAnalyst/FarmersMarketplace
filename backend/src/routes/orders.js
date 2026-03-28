@@ -5,6 +5,7 @@ const validate = require('../middleware/validate');
 const {
   sendPayment,
   getBalance,
+  getPlatformFeeInfo,
   createClaimableBalance,
   createPreorderClaimableBalance,
   claimBalance,
@@ -29,6 +30,14 @@ function hasReachedDeliveryDate(preorderDeliveryDate) {
   if (!unlockUnix) return false;
   return Math.floor(Date.now() / 1000) >= unlockUnix;
 }
+
+// GET /api/orders/fee-preview?amount=X — returns fee breakdown for a given amount
+router.get('/fee-preview', (req, res) => {
+  const amount = parseFloat(req.query.amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'amount is required' });
+  const info = getPlatformFeeInfo(amount);
+  res.json({ success: true, total: amount, feePercent: info.feePercent, feeAmount: info.feeAmount, farmerAmount: info.farmerAmount });
+});
 
 // POST /api/orders - buyer places + pays for an order
 router.post('/', auth, validate.order, async (req, res) => {
@@ -264,6 +273,89 @@ router.post('/', auth, validate.order, async (req, res) => {
         receiverPublicKey: product.farmer_wallet,
         amount: totalPrice,
         memo: `Order#${orderId}`,
+      });
+
+      db.prepare('UPDATE orders SET status = ?, stellar_tx_hash = ? WHERE id = ?')
+        .run('paid', txHash, orderId);
+    }
+
+    const farmer = db.prepare('SELECT id, name, email, stellar_public_key FROM users WHERE id = ?')
+      .get(product.farmer_id);
+
+    if (buyer.referred_by && buyer.referral_bonus_sent === 0) {
+      const referrer = db.prepare('SELECT stellar_public_key FROM users WHERE id = ?')
+        .get(buyer.referred_by);
+      const treasurySecret = process.env.MARKETPLACE_TREASURY_SECRET;
+
+      if (referrer && treasurySecret) {
+        try {
+          await sendPayment({
+            senderSecret: treasurySecret,
+            receiverPublicKey: referrer.stellar_public_key,
+            amount: 1.0,
+            memo: `Referral Bonus: ${buyer.name}`.slice(0, 28),
+          });
+          db.prepare('UPDATE users SET referral_bonus_sent = 1 WHERE id = ?').run(buyer.id);
+        } catch (bonusErr) {
+          console.error('[Referral] Failed to send bonus:', bonusErr.message);
+        }
+      }
+    }
+
+    sendOrderEmails({
+      order: {
+        id: orderId,
+        quantity,
+        total_price: totalPrice,
+        stellar_tx_hash: txHash,
+      },
+      product,
+      buyer,
+      farmer,
+    }).catch((mailErr) => console.error('Email notification failed:', mailErr.message));
+
+    const updated = db.prepare(
+      'SELECT quantity, low_stock_threshold, low_stock_alerted FROM products WHERE id = ?'
+    ).get(product_id);
+
+    if (updated && updated.quantity <= updated.low_stock_threshold && !updated.low_stock_alerted) {
+      db.prepare('UPDATE products SET low_stock_alerted = 1 WHERE id = ?').run(product_id);
+      sendLowStockAlert({ product: { ...product, quantity: updated.quantity }, farmer })
+        .catch((lowStockErr) => console.error('Low-stock alert failed:', lowStockErr.message));
+    }
+
+    const feeInfo = getPlatformFeeInfo(totalPrice);
+    const responseData = {
+      success: true,
+      orderId,
+      status: 'paid',
+      txHash,
+      totalPrice,
+      discount: discount > 0 ? discount : undefined,
+      fee: feeInfo.feeAmount > 0 ? { percent: feeInfo.feePercent, amount: feeInfo.feeAmount, farmerAmount: feeInfo.farmerAmount } : undefined,
+      preorder: !!product.is_preorder,
+      preorderDeliveryDate: product.preorder_delivery_date || null,
+      claimableBalanceId: balanceId,
+    };
+
+    if (appliedCoupon) {
+      db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(appliedCoupon.id);
+    }
+
+    if (idempotencyKey) cacheResponse(idempotencyKey, responseData);
+    return res.json(responseData);
+  } catch (e) {
+    db.transaction(() => {
+      db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('failed', orderId);
+      db.prepare('UPDATE products SET quantity = quantity + ? WHERE id = ?').run(quantity, product_id);
+    })();
+
+    if (e.code === 'account_not_found') {
+      return res.status(402).json({
+        success: false,
+        message: 'Please fund your wallet before purchasing',
+        code: 'unfunded_account',
+        orderId,
       });
     }
 

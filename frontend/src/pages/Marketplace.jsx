@@ -17,15 +17,15 @@ const PAGE_SIZE = 20;
 const MAX_PRICE = 500;
 
 const s = {
-  page:       { maxWidth: 1100, margin: '0 auto', padding: 24 },
+  page:       { maxWidth: 1100, margin: '0 auto', padding: 16 },
   title:      { fontSize: 24, fontWeight: 700, color: '#2d6a4f', marginBottom: 8 },
   sub:        { color: '#666', marginBottom: 20, fontSize: 15 },
   filters:    { display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24, alignItems: 'center' },
-  input:      { padding: '9px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 },
-  select:     { padding: '9px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, background: '#fff' },
-  priceRow:   { display: 'flex', gap: 6, alignItems: 'center' },
-  resetBtn:   { padding: '9px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#f5f5f5', cursor: 'pointer', fontSize: 13 },
-  grid:       { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 20 },
+  input:      { padding: '9px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, minHeight: 44 },
+  select:     { padding: '9px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, background: '#fff', minHeight: 44 },
+  priceRow:   { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
+  resetBtn:   { padding: '9px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#f5f5f5', cursor: 'pointer', fontSize: 13, minHeight: 44 },
+  grid:       { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 },
   card:       { background: '#fff', borderRadius: 12, padding: 20, boxShadow: '0 1px 8px #0001', cursor: 'pointer', transition: 'transform 0.1s', border: '2px solid transparent', position: 'relative' },
   cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   favoriteBtn: { background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28 },

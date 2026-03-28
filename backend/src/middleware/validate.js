@@ -81,4 +81,14 @@ module.exports = {
     amount: z.coerce.number().positive('amount must be a positive number').refine(v => v >= 0.0000001, 'amount too small'),
     memo: z.string().max(28, 'memo must be 28 characters or fewer').optional(),
   })),
+
+  confirmPassword: validate(z.object({
+    password: z.string().min(1, 'password is required'),
+  })),
+
+  recover: validate(z.object({
+    email: z.string().email('valid email required'),
+    password: z.string().min(1, 'password is required'),
+    mnemonic: z.string().min(1, 'mnemonic is required'),
+  })),
 };

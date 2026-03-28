@@ -1,4 +1,6 @@
 const StellarSdk = require("@stellar/stellar-sdk");
+const bip39 = require("bip39");
+const StellarHDWallet = require("stellar-hd-wallet");
 
 const STELLAR_NETWORK = (
   process.env.STELLAR_NETWORK || "testnet"
@@ -38,6 +40,34 @@ function createWallet() {
   return { publicKey: keypair.publicKey(), secretKey: keypair.secret() };
 }
 
+/**
+ * Generate a BIP39 mnemonic and derive a Stellar keypair from it.
+ * Returns { mnemonic, publicKey, secretKey }
+ */
+function createWalletFromMnemonic() {
+  const mnemonic = bip39.generateMnemonic(256); // 24-word phrase
+  const wallet = StellarHDWallet.fromMnemonic(mnemonic);
+  const keypair = StellarSdk.Keypair.fromSecret(wallet.getSecret(0));
+  return {
+    mnemonic,
+    publicKey: keypair.publicKey(),
+    secretKey: keypair.secret(),
+  };
+}
+
+/**
+ * Derive a Stellar keypair from an existing BIP39 mnemonic.
+ * Returns { publicKey, secretKey }
+ */
+function deriveKeypairFromMnemonic(mnemonic) {
+  if (!bip39.validateMnemonic(mnemonic)) {
+    throw new Error("Invalid mnemonic phrase");
+  }
+  const wallet = StellarHDWallet.fromMnemonic(mnemonic);
+  const keypair = StellarSdk.Keypair.fromSecret(wallet.getSecret(0));
+  return { publicKey: keypair.publicKey(), secretKey: keypair.secret() };
+}
+
 async function fundTestnetAccount(publicKey) {
   const response = await fetch(
     `https://friendbot.stellar.org?addr=${publicKey}`,
@@ -71,7 +101,17 @@ async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
     throw error;
   }
 
-  const transaction = new StellarSdk.TransactionBuilder(senderAccount, {
+  const feePercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || '0');
+  const platformWallet = process.env.PLATFORM_WALLET_PUBLIC_KEY;
+
+  const farmerAmount = feePercent > 0 && platformWallet
+    ? parseFloat((amount * (1 - feePercent / 100)).toFixed(7))
+    : amount;
+  const feeAmount = feePercent > 0 && platformWallet
+    ? parseFloat((amount * (feePercent / 100)).toFixed(7))
+    : 0;
+
+  const txBuilder = new StellarSdk.TransactionBuilder(senderAccount, {
     fee: StellarSdk.BASE_FEE,
     networkPassphrase,
   })
@@ -79,13 +119,24 @@ async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
       StellarSdk.Operation.payment({
         destination: receiverPublicKey,
         asset: StellarSdk.Asset.native(),
-        amount: amount.toFixed(7),
+        amount: farmerAmount.toFixed(7),
       }),
     )
     .addMemo(StellarSdk.Memo.text(memo || "FarmersMarket"))
-    .setTimeout(30)
-    .build();
+    .setTimeout(30);
 
+  // Add platform fee operation atomically if configured
+  if (feeAmount > 0 && platformWallet) {
+    txBuilder.addOperation(
+      StellarSdk.Operation.payment({
+        destination: platformWallet,
+        asset: StellarSdk.Asset.native(),
+        amount: feeAmount.toFixed(7),
+      }),
+    );
+  }
+
+  const transaction = txBuilder.build();
   transaction.sign(senderKeypair);
   const result = await server.submitTransaction(transaction);
   return result.hash;
@@ -363,6 +414,15 @@ async function removeTrustline({ secret, assetCode, assetIssuer }) {
   tx.sign(keypair);
   const result = await server.submitTransaction(tx);
   return result.hash;
+function getPlatformFeeInfo(amount) {
+  const feePercent = parseFloat(process.env.PLATFORM_FEE_PERCENT || '0');
+  const platformWallet = process.env.PLATFORM_WALLET_PUBLIC_KEY || null;
+  if (!feePercent || !platformWallet) {
+    return { feePercent: 0, feeAmount: 0, farmerAmount: amount, platformWallet: null };
+  }
+  const feeAmount = parseFloat((amount * feePercent / 100).toFixed(7));
+  const farmerAmount = parseFloat((amount - feeAmount).toFixed(7));
+  return { feePercent, feeAmount, farmerAmount, platformWallet };
 }
 
 /**
@@ -434,12 +494,15 @@ module.exports = {
   isTestnet,
   server,
   createWallet,
+  createWalletFromMnemonic,
+  deriveKeypairFromMnemonic,
   fundTestnetAccount,
   getBalance,
   getAllBalances,
   sendPayment,
   pathPayment,
   getPathPaymentEstimate,
+  getPlatformFeeInfo,
   getTransactions,
   addTrustline,
   removeTrustline,

@@ -352,4 +352,26 @@ export const api = {
   cancelSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   pauseSubscription: (id) => request(`/subscriptions/${id}/pause`, { method: 'PATCH' }),
   resumeSubscription: (id) => request(`/subscriptions/${id}/resume`, { method: 'PATCH' }),
+
+  // Product import (AgroAPI / JSON)
+  importProductsPreview: (products) => request('/products/import', { method: 'POST', body: { products } }),
+  importProductsConfirm: (products) => request('/products/import/confirm', { method: 'POST', body: { products } }),
+  // Seed phrase backup & recovery
+  getSeedPhrase: (password) => request('/auth/seed-phrase', { method: 'POST', body: { password } }),
+  recoverAccount: (body) => request('/auth/recover', { method: 'POST', body }),
+  // Availability calendar
+  getCalendar: (productId) => request(`/products/${productId}/calendar`),
+  setCalendarWeek: (productId, body) => request(`/products/${productId}/calendar`, { method: 'POST', body }),
+  // Cooperatives & multi-sig
+  createCooperative: (body) => request('/cooperatives', { method: 'POST', body }),
+  getCooperatives: () => request('/cooperatives'),
+  setupMultisig: (id, body) => request(`/cooperatives/${id}/multisig-setup`, { method: 'POST', body }),
+  initiateCoopTx: (id, body) => request(`/cooperatives/${id}/transactions`, { method: 'POST', body }),
+  signPendingTx: (txId) => request(`/cooperatives/transactions/${txId}/sign`, { method: 'POST' }),
+  getPendingTxs: (coopId) => request(`/cooperatives/${coopId}/pending`),
+  // Platform fee
+  getFeePreview: (amount) => request(`/orders/fee-preview?amount=${amount}`),
+  // Account alerts
+  getAlerts: () => request('/wallet/alerts'),
+  markAlertRead: (id) => request(`/wallet/alerts/${id}/read`, { method: 'PATCH' }),
 };

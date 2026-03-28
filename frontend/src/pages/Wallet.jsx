@@ -19,6 +19,82 @@ const s = {
   page:    { maxWidth: 800, margin: '0 auto', padding: 24 },
   title:   { fontSize: 24, fontWeight: 700, color: '#2d6a4f', marginBottom: 24 },
   card:    { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 8px #0001', marginBottom: 24 },
+  page: { maxWidth: 800, margin: "0 auto", padding: 16 },
+  disclaimer: {
+    background: '#fff8e1', border: '1px solid #f9a825', borderRadius: 10,
+    padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 12, alignItems: 'flex-start',
+    background: "#fff8e1",
+    border: "1px solid #f9a825",
+    borderRadius: 10,
+    padding: "14px 16px",
+    marginBottom: 20,
+    display: "flex",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  disclaimerIcon: { fontSize: 20, flexShrink: 0, marginTop: 1 },
+  disclaimerBody: { flex: 1, fontSize: 13, color: "#5d4037", lineHeight: 1.5 },
+  disclaimerTitle: {
+    fontWeight: 700,
+    fontSize: 14,
+    marginBottom: 3,
+    color: "#e65100",
+  },
+  disclaimerDismiss: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    color: "#999",
+    fontSize: 18,
+    lineHeight: 1,
+    padding: 0,
+    flexShrink: 0,
+  },
+  title: { fontSize: 24, fontWeight: 700, color: "#2d6a4f", marginBottom: 24 },
+  card: {
+    background: "#fff",
+    borderRadius: 12,
+    padding: 24,
+    boxShadow: "0 1px 8px #0001",
+    marginBottom: 24,
+  },
+  balance: { fontSize: 40, fontWeight: 700, color: "#2d6a4f" },
+  key: {
+    fontSize: 12,
+    color: "#888",
+    wordBreak: "break-all",
+    marginTop: 8,
+    fontFamily: "monospace",
+  },
+  btn: {
+    background: "#2d6a4f",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "10px 20px",
+    cursor: "pointer",
+    fontWeight: 600,
+    marginTop: 16,
+    minHeight: 44,
+  },
+  btnDanger: {
+    background: "#c0392b",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "10px 20px",
+    cursor: "pointer",
+    fontWeight: 600,
+  },
+  tx: {
+    borderBottom: "1px solid #eee",
+    padding: "12px 0",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  title: { fontSize: 24, fontWeight: 700, color: '#2d6a4f', marginBottom: 24 },
+  card: { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 8px #0001', marginBottom: 24 },
   balance: { fontSize: 40, fontWeight: 700, color: '#2d6a4f' },
   key:     { fontSize: 12, color: '#888', wordBreak: 'break-all', marginTop: 8, fontFamily: 'monospace' },
   btn:     { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer', fontWeight: 600, marginTop: 16 },
@@ -45,6 +121,27 @@ const s = {
   assetCode: { fontWeight: 700, fontSize: 15, color: '#2d6a4f' },
   assetBal: { fontSize: 14, color: '#333', fontWeight: 600 },
   assetIssuer: { fontSize: 11, color: '#aaa', fontFamily: 'monospace', marginTop: 2 },
+  sent: { color: "#c0392b", fontWeight: 600 },
+  recv: { color: "#2d6a4f", fontWeight: 600 },
+  hash: { fontSize: 11, color: "#aaa", fontFamily: "monospace", marginTop: 2 },
+  msg: { padding: "10px 14px", borderRadius: 8, marginTop: 12, fontSize: 14 },
+  label: {
+    display: "block",
+    fontSize: 13,
+    color: "#555",
+    marginBottom: 4,
+    marginTop: 14,
+  },
+  input: {
+    width: "100%",
+    padding: "9px 12px",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    fontSize: 16,
+    boxSizing: "border-box",
+    minHeight: 44,
+  },
+  row: { display: "flex", gap: 12, alignItems: "flex-end", marginTop: 16 },
 };
 
 if (typeof document !== 'undefined' && !document.getElementById('wallet-toast-style')) {
@@ -78,6 +175,12 @@ export default function Wallet() {
   const [funding, setFunding]     = useState(false);
   const [fundMsg, setFundMsg]     = useState(null);
   const [toasts, setToasts]       = useState([]);
+  const [funding, setFunding] = useState(false);
+  const [fundMsg, setFundMsg] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const [sendForm, setSendForm]   = useState({ destination: '', amount: '', memo: '' });
   const [sending, setSending]     = useState(false);
@@ -117,6 +220,11 @@ export default function Wallet() {
     } finally {
       setLoading(false);
     }
+    // Load alerts (non-blocking)
+    api.getAlerts().then(res => {
+      setAlerts(res.data ?? []);
+      setUnreadCount(res.unreadCount ?? 0);
+    }).catch(() => {});
   }, []);
 
   const connectStream = useCallback(() => {
@@ -307,6 +415,10 @@ export default function Wallet() {
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 8 }}>Custom Asset</div>
                 <label style={s.label}>Asset Code</label>
+          <div className="send-row" style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={s.label}>Amount</label>
+              <div style={{ display: "flex", gap: 8 }}>
                 <input
                   style={s.input} placeholder="e.g. USDC"
                   value={tlForm.asset_code}
@@ -399,6 +511,60 @@ export default function Wallet() {
               <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4, textTransform: 'uppercase', fontWeight: 600 }}>Your Referral Code</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: '#2d6a4f', fontFamily: 'monospace', letterSpacing: 1 }}>
                 {wallet?.referralCode || '-'}
+      <div style={s.card}>
+        <h3 style={{ marginBottom: 16, color: '#333', display: 'flex', alignItems: 'center', gap: 8 }}>
+          🔔 Activity Alerts
+          {unreadCount > 0 && (
+            <span style={{ background: '#c0392b', color: '#fff', borderRadius: 12, padding: '2px 8px', fontSize: 12, fontWeight: 700 }}>
+              {unreadCount}
+            </span>
+          )}
+        </h3>
+        {alerts.length === 0 ? (
+          <p style={{ color: '#888', fontSize: 14 }}>No alerts yet.</p>
+        ) : (
+          alerts.map((alert) => (
+            <div key={alert.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', opacity: alert.read_at ? 0.6 : 1 }}>
+              <div>
+                <div style={{ fontSize: 14, color: alert.type === 'large_payment' ? '#c0392b' : '#856404', fontWeight: alert.read_at ? 400 : 600 }}>
+                  {alert.type === 'large_payment' ? '⚠️ Large Payment' : '❌ Failed Transactions'}
+                </div>
+                <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{alert.message}</div>
+                <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{new Date(alert.created_at).toLocaleString()}</div>
+              </div>
+              {!alert.read_at && (
+                <button
+                  style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, color: '#555', flexShrink: 0, marginLeft: 8 }}
+                  onClick={async () => {
+                    await api.markAlertRead(alert.id).catch(() => {});
+                    setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, read_at: new Date().toISOString() } : a));
+                    setUnreadCount(prev => Math.max(0, prev - 1));
+                  }}
+                >
+                  Mark read
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div style={s.card}>
+        <h3 style={{ marginBottom: 16, color: "#333" }}>Transaction History</h3>
+        {txs.length === 0 && (
+          <p style={{ color: "#888", fontSize: 14 }}>
+            No transactions yet. Fund your wallet and make a purchase.
+          </p>
+        )}
+        {txs.map((tx) => (
+          <div key={tx.id} style={s.tx}>
+            <div>
+              <div style={tx.type === "sent" ? s.sent : s.recv}>
+                {tx.type === "sent" ? "↑ Sent" : "↓ Received"}{" "}
+                {parseFloat(tx.amount).toFixed(2)} XLM
+              </div>
+              <div style={{ fontSize: 12, color: "#888" }}>
+                {new Date(tx.created_at).toLocaleString()}
               </div>
             </div>
           </div>
