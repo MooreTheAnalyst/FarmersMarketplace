@@ -2,6 +2,7 @@ import React, { useEffect, useContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FavoritesProvider } from './context/FavoritesContext';
+import { CompareProvider } from './context/CompareContext';
 import { LoadingProvider, LoadingContext } from './context/LoadingContext';
 import { setLoadingCallback, setLogoutCallback } from './api/client';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -10,6 +11,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import { LoginPage, RegisterPage } from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Marketplace from './pages/Marketplace';
+import Compare from './pages/Compare';
 import ProductDetail from './pages/ProductDetail';
 import Wallet from './pages/Wallet';
 import Orders from './pages/Orders';
@@ -56,6 +58,7 @@ function AppContent() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/marketplace" element={<Marketplace />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/dashboard" element={<PrivateRoute role="farmer"><Dashboard /></PrivateRoute>} />
           <Route path="/wallet" element={<PrivateRoute><Wallet /></PrivateRoute>} />
@@ -77,16 +80,13 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <LoadingProvider>
-          <AppContent />
+          <FavoritesProvider>
+            <CompareProvider>
+              <AppContent />
+            </CompareProvider>
+          </FavoritesProvider>
         </LoadingProvider>
       </AuthProvider>
     </ErrorBoundary>
-    <AuthProvider>
-      <FavoritesProvider>
-        <LoadingProvider>
-          <AppContent />
-        </LoadingProvider>
-      </FavoritesProvider>
-    </AuthProvider>
   );
 }

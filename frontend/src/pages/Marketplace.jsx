@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
+import { useCompare } from '../context/CompareContext';
 import { useXlmRate } from '../utils/useXlmRate';
 import { useDebounce } from '../utils/useDebounce';
 import StarRating from '../components/StarRating';
@@ -17,6 +18,7 @@ const PAGE_SIZE = 20;
 const MAX_PRICE = 500;
 
 const s = {
+  page:       { maxWidth: 1100, margin: '0 auto', padding: 24, paddingBottom: 140 },
   page:       { maxWidth: 1100, margin: '0 auto', padding: 16 },
   title:      { fontSize: 24, fontWeight: 700, color: '#2d6a4f', marginBottom: 8 },
   sub:        { color: '#666', marginBottom: 20, fontSize: 15 },
@@ -46,6 +48,12 @@ const s = {
   sectionTitle: { fontSize: 20, fontWeight: 700, color: '#2d6a4f', margin: '32px 0 16px' },
   bundleCard: { background: '#fff', borderRadius: 12, padding: 20, boxShadow: '0 1px 8px #0001', border: '2px solid #fff3cd' },
   bundleItems:{ fontSize: 13, color: '#555', margin: '8px 0 12px', paddingLeft: 16 },
+  compareBtn: { background: 'none', border: '1px solid #2d6a4f', borderRadius: 999, color: '#2d6a4f', padding: '8px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' },
+  compareBtnActive: { background: '#2d6a4f', color: '#fff' },
+  compareBar: { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20, background: '#fff', borderTop: '1px solid #ddd', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 24px', boxShadow: '0 -4px 14px #00000010' },
+  compareBarItems: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', minHeight: 36, color: '#333' },
+  compareItem: { background: '#f1f7f1', color: '#2d6a4f', borderRadius: 999, padding: '6px 10px', fontSize: 13, fontWeight: 600, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  compareActionBtn: { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, minWidth: 140 },
   buyBtn:     { background: '#2d6a4f', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 },
 };
 
@@ -65,6 +73,7 @@ export default function Marketplace() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isFavorited, toggleFavorite } = useFavorites();
+  const { products: compareProducts, toggleProduct, isCompared } = useCompare();
   const { usd } = useXlmRate();
 
   const debouncedSearch = useDebounce(filters.search, 400);
@@ -270,7 +279,18 @@ export default function Marketplace() {
                   <StarRating value={p.avg_rating} count={p.review_count} size={13} />
                 </div>
               )}
-              
+              <button
+                style={{
+                  ...s.compareBtn,
+                  ...(isCompared(p.id) ? s.compareBtnActive : {}),
+                  marginTop: 10,
+                }}
+                onClick={e => { e.stopPropagation(); toggleProduct(p); }}
+                aria-pressed={isCompared(p.id)}
+              >
+                {isCompared(p.id) ? 'Selected for compare' : 'Compare'}
+              </button>
+
               {/* Seller Information Section */}
               <div style={s.sellerSection}>
                 {p.farmer_avatar ? (
@@ -300,6 +320,24 @@ export default function Marketplace() {
         limit={PAGE_SIZE}
         onChange={handlePageChange}
       />
+
+      {compareProducts.length > 0 && (
+        <div style={s.compareBar}>
+          <div style={s.compareBarItems}>
+            <strong>Products to compare:</strong>
+            {compareProducts.map(product => (
+              <span key={product.id} style={s.compareItem}>{product.name}</span>
+            ))}
+          </div>
+          <button
+            style={s.compareActionBtn}
+            disabled={compareProducts.length < 2}
+            onClick={() => navigate('/compare')}
+          >
+            {compareProducts.length < 2 ? `Select ${2 - compareProducts.length} more` : 'Compare'}
+          </button>
+        </div>
+      )}
 
       {bundles.length > 0 && (
         <div>
