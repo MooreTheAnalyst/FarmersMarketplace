@@ -169,6 +169,7 @@ try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT
     `ALTER TABLE orders ADD COLUMN address_id INTEGER REFERENCES addresses(id)`,
     `ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`,
     `ALTER TABLE products ADD COLUMN image_url TEXT`,
+    `ALTER TABLE products ADD COLUMN carbon_kg_per_unit REAL`,
     `ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`,
     `ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1`,
