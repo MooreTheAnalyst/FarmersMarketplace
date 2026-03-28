@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const db = require('../db/schema');
+const { createWallet, getBalance } = require('../utils/stellar');
 const { createWalletFromMnemonic, deriveKeypairFromMnemonic } = require('../utils/stellar');
 const validate = require('../middleware/validate');
 const auth = require('../middleware/auth');
@@ -298,6 +299,36 @@ router.post('/logout', async (req, res) => {
   res.json({ ok: true });
 });
 
+// DELETE /api/auth/account — self-service account deletion
+router.delete('/account', auth, async (req, res) => {
+  const force = req.query.force === 'true';
+
+  const { rows } = await db.query(
+    'SELECT stellar_public_key FROM users WHERE id = $1',
+    [req.user.id]
+  );
+  if (!rows[0]) return err(res, 404, 'User not found', 'not_found');
+
+  // Check Stellar balance — warn if above base reserve (1 XLM)
+  if (!force) {
+    const balance = await getBalance(rows[0].stellar_public_key);
+    if (balance > 1) {
+      return res.status(409).json({
+        success: false,
+        code: 'balance_warning',
+        message: 'Your Stellar wallet still has a balance. Withdraw your funds before deleting your account, or confirm deletion with ?force=true.',
+        balance,
+        publicKey: rows[0].stellar_public_key,
+      });
+    }
+  }
+
+  // Delete user — cascade handles related rows (orders, refresh_tokens, etc.)
+  await db.query('DELETE FROM users WHERE id = $1', [req.user.id]);
+
+  // Clear the refresh token cookie
+  res.clearCookie('refreshToken', { path: '/api/auth' });
+  res.json({ success: true, message: 'Account deleted' });
 /**
  * POST /api/auth/seed-phrase  (password confirmation required)
  * Returns the decrypted mnemonic ONCE per request. Never cached.

@@ -108,7 +108,12 @@ async function request(path, options = {}, retry = true) {
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.error || "Request failed");
+  if (!res.ok) {
+    const e = new Error(data.message || data.error || 'Request failed');
+    e.status = res.status;
+    e.data = data;
+    throw e;
+  }
   return data;
 }
 
@@ -304,6 +309,7 @@ export const api = {
   removeTrustline:(body)       => request('/wallet/trustline', { method: 'DELETE', body }),
   getWalletAssets: ()          => request('/wallet/assets'),
   getPathEstimate: (params)    => request(`/wallet/path-estimate${toQs(params)}`),
+  deleteAccount:   (force)     => request(`/auth/account${force ? '?force=true' : ''}`, { method: 'DELETE' }),
   // Returns the SSE URL with the token embedded (EventSource can't set headers)
   getWalletStreamUrl: ()       => `/api/wallet/stream?token=${encodeURIComponent(accessToken || '')}`,
   searchProducts: (q) => request(`/products/search?q=${encodeURIComponent(q)}`),
