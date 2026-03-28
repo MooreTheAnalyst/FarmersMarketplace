@@ -38,4 +38,15 @@ Date:     ${new Date().toUTCString()}
   ]);
 }
 
-module.exports = { sendOrderEmails };
+async function sendDisputeResolvedEmail({ dispute, order, product, buyer }) {
+  if (!process.env.SMTP_HOST) return;
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: buyer.email,
+    subject: `Dispute #${dispute.id} Resolved – Order #${order.id}`,
+    text: `Hi ${buyer.name},\n\nYour dispute for Order #${order.id} (${product.name}) has been resolved.\n\nResolution: ${dispute.resolution || 'No additional notes provided.'}\n\nThank you for using Farmers Marketplace.`,
+  });
+}
+
+module.exports = { sendOrderEmails, sendDisputeResolvedEmail };

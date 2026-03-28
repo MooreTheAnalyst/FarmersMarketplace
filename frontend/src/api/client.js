@@ -75,4 +75,8 @@ export const api = {
   getWallet: () => request('/wallet'),
   getTransactions: () => request('/wallet/transactions'),
   fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+
+  fileDispute: (body) => request('/disputes', { method: 'POST', body }),
+  getDisputes: () => request('/disputes'),
+  resolveDispute: (id, body) => request(`/disputes/${id}`, { method: 'PATCH', body }),
 };

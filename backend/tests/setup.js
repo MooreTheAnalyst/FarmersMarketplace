@@ -35,6 +35,7 @@ jest.mock('../src/utils/stellar', () => ({
 // --- Mailer mock ---
 jest.mock('../src/utils/mailer', () => ({
   sendOrderEmails: jest.fn().mockResolvedValue({}),
+  sendDisputeResolvedEmail: jest.fn().mockResolvedValue({}),
 }));
 
 const request = require('supertest');

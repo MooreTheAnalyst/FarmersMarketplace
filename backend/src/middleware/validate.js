@@ -31,6 +31,16 @@ const schemas = {
     body('quantity').isInt({ gt: 0 }).withMessage('quantity must be a positive integer'),
     handle,
   ],
+  dispute: [
+    body('order_id').isInt({ gt: 0 }).withMessage('order_id must be a positive integer'),
+    body('reason').trim().notEmpty().withMessage('reason is required'),
+    handle,
+  ],
+  resolveDispute: [
+    body('status').isIn(['open', 'under_review', 'resolved']).withMessage('status must be open, under_review, or resolved'),
+    body('resolution').optional().trim(),
+    handle,
+  ],
 };
 
 module.exports = schemas;

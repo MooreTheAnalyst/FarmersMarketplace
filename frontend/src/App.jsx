@@ -7,6 +7,8 @@ import Dashboard from './pages/Dashboard';
 import Marketplace from './pages/Marketplace';
 import ProductDetail from './pages/ProductDetail';
 import Wallet from './pages/Wallet';
+import Orders from './pages/Orders';
+import AdminDashboard from './pages/AdminDashboard';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -20,6 +22,7 @@ function Home() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" />;
+  if (user.role === 'admin') return <Navigate to="/admin" />;
   return <Navigate to={user.role === 'farmer' ? '/dashboard' : '/marketplace'} />;
 }
 
@@ -36,6 +39,8 @@ export default function App() {
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/dashboard" element={<PrivateRoute role="farmer"><Dashboard /></PrivateRoute>} />
           <Route path="/wallet" element={<PrivateRoute><Wallet /></PrivateRoute>} />
+          <Route path="/orders" element={<PrivateRoute role="buyer"><Orders /></PrivateRoute>} />
+          <Route path="/admin" element={<PrivateRoute role="admin"><AdminDashboard /></PrivateRoute>} />
         </Routes>
       </div>
     </AuthProvider>

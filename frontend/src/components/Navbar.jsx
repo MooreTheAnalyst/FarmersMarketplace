@@ -27,7 +27,9 @@ export default function Navbar() {
           <>
             <Link to="/marketplace" style={s.link}>Browse</Link>
             {user.role === 'farmer' && <Link to="/dashboard" style={s.link}>Dashboard</Link>}
-            <Link to="/wallet" style={s.link}>Wallet</Link>
+            {user.role === 'buyer' && <Link to="/orders" style={s.link}>My Orders</Link>}
+            {user.role === 'admin' && <Link to="/admin" style={s.link}>Admin</Link>}
+            {user.role !== 'admin' && <Link to="/wallet" style={s.link}>Wallet</Link>}
             <span style={{ color: '#d8f3dc', fontSize: 13 }}>{user.name} ({user.role})</span>
             <button style={s.btn} onClick={handleLogout}>Logout</button>
           </>
