@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { validateProduct } from '../utils/validation';
 import { getErrorMessage } from '../utils/errorMessages';
+import { useTranslation } from 'react-i18next';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_SIZE_MB = 5;
@@ -59,15 +60,8 @@ const EMPTY_FORM = { name: '', description: '', price: '', quantity: '', unit: '
 import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { user } = useAuth();
-  const [products, setProducts] = useState([]);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [restockVals, setRestockVals] = useState({});
-  const [msg, setMsg] = useState(null);
-  const [formErrors, setFormErrors] = useState({});
-  const [sales, setSales] = useState([]);
-  const [salesMsg, setSalesMsg] = useState({});
-  const [formErrors, setFormErrors] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -139,7 +133,7 @@ export default function Dashboard() {
   }
 
   async function handleGalleryDelete(imgId) {
-    if (!confirm('Delete this image?')) return;
+    if (!confirm(t('dashboard.deleteImageConfirm'))) return;
     try {
       await api.deleteProductImage(galleryProductId, imgId);
       const res = await api.getProductImages(galleryProductId);
@@ -196,7 +190,7 @@ export default function Dashboard() {
   }
 
   async function handleGalleryDelete(imgId) {
-    if (!confirm('Delete this image?')) return;
+    if (!confirm(t('dashboard.deleteImageConfirm'))) return;
     try {
       await api.deleteProductImage(galleryProductId, imgId);
       const res = await api.getProductImages(galleryProductId);
@@ -320,7 +314,7 @@ export default function Dashboard() {
         federation_name: profile.federation_name || undefined,
       });
       setProfile({ bio: res.data.bio || '', location: res.data.location || '', avatar_url: res.data.avatar_url || '', federation_name: res.data.federation_name || '' });
-      setProfileMsg({ type: 'ok', text: 'Profile updated' });
+      setProfileMsg({ type: 'ok', text: t('dashboard.profileUpdated') });
     } catch (err) {
       setProfileMsg({ type: 'err', text: getErrorMessage(err) });
     }
@@ -379,7 +373,7 @@ export default function Dashboard() {
         quantity: parseInt(form.quantity),
         image_url: finalImageUrl || undefined,
       });
-      setMsg({ type: 'ok', text: 'Product listed successfully' });
+      setMsg({ type: 'ok', text: t('dashboard.productListedOk') });
       setForm(EMPTY_FORM);
       removeImage();
       load();
@@ -389,13 +383,13 @@ export default function Dashboard() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Remove this product?')) return;
+    if (!confirm(t('dashboard.removeProductConfirm'))) return;
     try { await api.deleteProduct(id); load(); } catch {}
   }
 
   async function handleRestock(id) {
     const qty = parseInt(restockVals[id], 10);
-    if (isNaN(qty) || qty <= 0) return alert('Enter a valid positive number to restock.');
+    if (isNaN(qty) || qty <= 0) return alert(t('dashboard.restockInvalid'));
     try {
       await api.restockProduct(id, qty);
       setRestockVals({ ...restockVals, [id]: '' });
@@ -422,7 +416,7 @@ export default function Dashboard() {
     return (
       <div style={s.page}>
         <div style={{ ...s.msg, background: '#fee', color: '#c0392b', marginBottom: 16 }}>
-          <strong>Error loading dashboard:</strong> {error}
+          <strong>{t('dashboard.errorLoading')}</strong> {error}
         </div>
       </div>
     );
@@ -466,13 +460,13 @@ export default function Dashboard() {
 
   return (
 <div style={s.page}>
-      <div style={s.title}>{user?.role === 'admin' ? '🔧 Admin Dashboard' : '🌾 Farmer Dashboard'}</div>
+      <div style={s.title}>{user?.role === 'admin' ? t('dashboard.adminTitle') : t('dashboard.title')}</div>
       {user.role === 'admin' && (
         <div style={{ ...s.card, marginBottom: 24 }}> 
-          <h3 style={{ marginBottom: 16, color: '#333' }}>📋 Contract State Viewer</h3>
+          <h3 style={{ marginBottom: 16, color: '#333' }}>{t('dashboard.contractStateViewer')}</h3>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
             <div style={{ flex: 1, minWidth: 300 }}>
-              <label style={s.label}>Contract ID</label>
+              <label style={s.label}>{t('dashboard.contractId')}</label>
               <input
                 style={s.input}
                 value={contractId}
@@ -481,7 +475,7 @@ export default function Dashboard() {
               />
             </div>
             <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={s.label}>Key Prefix (optional)</label>
+              <label style={s.label}>{t('dashboard.keyPrefix')}</label>
               <input
                 style={s.input}
                 value={prefix}
@@ -490,7 +484,7 @@ export default function Dashboard() {
               />
             </div>
             <button style={s.btn} onClick={loadContractState} disabled={loadingState}>
-              {loadingState ? 'Loading...' : 'Load State'}
+              {loadingState ? t('dashboard.loading') : t('dashboard.loadState')}
             </button>
           </div>
           {stateErr && <div style={{ ...s.msg, background: '#fee', color: '#c0392b', marginTop: 12 }}>{stateErr}</div>}
@@ -499,9 +493,9 @@ export default function Dashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#f8f9fa' }}>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>Key</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>Value</th>
-                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>Durability</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>{t('dashboard.key')}</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>{t('dashboard.value')}</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #eee' }}>{t('dashboard.durability')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -521,14 +515,14 @@ export default function Dashboard() {
       <div style={s.grid}>
         {user.role === 'farmer' && (
           <div style={s.card}>
-            <h3 style={{ marginBottom: 16, color: '#333' }}>Add New Product</h3>
+            <h3 style={{ marginBottom: 16, color: '#333' }}>{t('dashboard.addProduct')}</h3>
           {msg && (
             <div style={{ ...s.msg, background: msg.type === 'ok' ? '#d8f3dc' : '#fee', color: msg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
               {msg.text}
             </div>
           )}
           <form onSubmit={handleAdd}>
-            {[['name', 'Product Name'], ['price', 'Price (XLM)'], ['quantity', 'Quantity'], ['unit', 'Unit (kg, bunch, etc.)']].map(([key, label]) => (
+            {[['name', t('dashboard.productName')], ['price', t('dashboard.price')], ['quantity', t('dashboard.quantity')], ['unit', t('dashboard.unit')]].map(([key, label]) => (
               <div key={key}>
                 <label style={s.label}>{label}</label>
                 <input
@@ -558,10 +552,10 @@ export default function Dashboard() {
               </div>
             ))}
 
-            <label style={s.label}>Description</label>
+            <label style={s.label}>{t('dashboard.description')}</label>
             <textarea style={s.textarea} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
 
-            <label style={s.label}>Category</label>
+            <label style={s.label}>{t('dashboard.category')}</label>
             <select style={s.input} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
               {['vegetables', 'fruits', 'grains', 'dairy', 'herbs', 'other'].map(c => (
                 <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
@@ -569,13 +563,13 @@ export default function Dashboard() {
             </select>
 
             {/* Image upload */}
-            <label style={s.label}>Product Image <span style={{ color: '#aaa', fontWeight: 400 }}>(optional · JPEG/PNG/WebP · max 5 MB)</span></label>
+            <label style={s.label}>{t('dashboard.productImage')} <span style={{ color: '#aaa', fontWeight: 400 }}>{t('dashboard.imageHint')}</span></label>
 
             {previewUrl ? (
               <>
                 <img src={previewUrl} alt="Preview" style={s.preview} />
-                {uploading && <div style={s.uploading}>Uploading image...</div>}
-                <button type="button" style={s.removeImg} onClick={removeImage}>✕ Remove image</button>
+                {uploading && <div style={s.uploading}>{t('dashboard.uploading')}</div>}
+                <button type="button" style={s.removeImg} onClick={removeImage}>{t('dashboard.removeImage')}</button>
               </>
             ) : (
               <div
@@ -585,11 +579,11 @@ export default function Dashboard() {
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
                 role="button"
-                aria-label="Upload product image"
+                aria-label={t('dashboard.productImage')}
                 tabIndex={0}
                 onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
               >
-                📷 Click or drag &amp; drop an image here
+                📷 {t('dashboard.uploadImage')}
               </div>
             )}
 
@@ -604,14 +598,14 @@ export default function Dashboard() {
             {imageErr && <div style={s.imgErr}>{imageErr}</div>}
 
             <button style={s.btn} type="submit" disabled={uploading || Object.keys(formErrors).length > 0}>
-              {uploading ? 'Uploading...' : 'List Product'}
+              {uploading ? t('dashboard.uploading') : t('dashboard.listProduct')}
             </button>
           </form>
         </div>
 
         <div style={s.card}>
-          <h3 style={{ marginBottom: 16, color: '#333' }}>My Listings ({products.length})</h3>
-          {products.length === 0 && <p style={{ color: '#888', fontSize: 14 }}>No products yet. Add your first listing.</p>}
+          <h3 style={{ marginBottom: 16, color: '#333' }}>{t('dashboard.myListings', { count: products.length })}</h3>
+          {products.length === 0 && <p style={{ color: '#888', fontSize: 14 }}>{t('dashboard.noProducts')}</p>}
           {products.map(p => (
             <div key={p.id} style={{ ...s.product, flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -630,13 +624,13 @@ export default function Dashboard() {
                     style={{ ...s.btn, padding: '4px 10px', fontSize: 12, background: '#555' }}
                     onClick={() => galleryProductId === p.id ? closeGallery() : openGallery(p.id)}
                   >
-                    📷 Photos
+                    {t('dashboard.photos')}
                   </button>
                   <button
                     style={{ ...s.btn, padding: '4px 10px', fontSize: 12, background: '#6c3483' }}
                     onClick={() => { setQrProductId(p.id); setQrProductName(p.name); }}
                   >
-                    📱 QR
+                    {t('dashboard.qr')}
                   </button>
                   <input
                     type="number" min="1" placeholder="+Qty"
@@ -644,8 +638,8 @@ export default function Dashboard() {
                     value={restockVals[p.id] || ''}
                     onChange={e => setRestockVals({ ...restockVals, [p.id]: e.target.value })}
                   />
-                  <button style={{ ...s.btn, padding: '4px 10px', fontSize: 12, background: '#218c74' }} onClick={() => handleRestock(p.id)}>Restock</button>
-                  <button style={s.del} onClick={() => handleDelete(p.id)}>Remove</button>
+                  <button style={{ ...s.btn, padding: '4px 10px', fontSize: 12, background: '#218c74' }} onClick={() => handleRestock(p.id)}>{t('dashboard.restock')}</button>
+                  <button style={s.del} onClick={() => handleDelete(p.id)}>{t('dashboard.remove')}</button>
                 </div>
               </div>
 
@@ -653,15 +647,15 @@ export default function Dashboard() {
               {galleryProductId === p.id && (
                 <div style={s.galleryPanel}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#2d6a4f' }}>
-                    Product Photos ({galleryImages.length}/{MAX_IMAGES})
-                    <span style={{ fontWeight: 400, color: '#888', marginLeft: 8 }}>First image is shown on marketplace cards</span>
+                    {t('dashboard.productPhotos', { count: galleryImages.length, max: MAX_IMAGES })}
+                    <span style={{ fontWeight: 400, color: '#888', marginLeft: 8 }}>{t('dashboard.primaryImageHint')}</span>
                   </div>
                   {galleryErr && <div style={{ color: '#c0392b', fontSize: 12, marginBottom: 8 }}>{galleryErr}</div>}
                   <div style={s.galleryGrid}>
                     {galleryImages.map((img, i) => (
                       <div key={img.id} style={s.galleryItem}>
                         <img src={img.url} alt={`Photo ${i + 1}`} style={{ ...s.galleryThumb, ...(i === 0 ? s.galleryThumbFirst : {}) }} />
-                        {i === 0 && <span style={{ fontSize: 10, color: '#2d6a4f', fontWeight: 600 }}>Primary</span>}
+                        {i === 0 && <span style={{ fontSize: 10, color: '#2d6a4f', fontWeight: 600 }}>{t('dashboard.primary')}</span>}
                         <div style={{ display: 'flex', gap: 3 }}>
                           <button style={s.arrowBtn} onClick={() => handleGalleryMove(i, -1)} disabled={i === 0} aria-label="Move left">◀</button>
                           <button style={s.arrowBtn} onClick={() => handleGalleryMove(i, 1)} disabled={i === galleryImages.length - 1} aria-label="Move right">▶</button>
@@ -677,7 +671,7 @@ export default function Dashboard() {
                         onClick={() => galleryInputRef.current?.click()}
                         disabled={galleryUploading}
                       >
-                        {galleryUploading ? 'Uploading...' : '+ Add Photos'}
+                        {galleryUploading ? t('dashboard.uploading') : t('dashboard.addPhotos')}
                       </button>
                       <input
                         ref={galleryInputRef}
@@ -698,16 +692,16 @@ export default function Dashboard() {
 
       {/* CSV Bulk Upload */}
       <div style={{ ...s.card, marginTop: 24 }}>
-        <h3 style={{ marginBottom: 16, color: '#333' }}>📤 Bulk Upload Products</h3>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>{t('dashboard.bulkUpload')}</h3>
         <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
-          Upload multiple products at once using a CSV file. Maximum 500 rows per upload.
+          {t('dashboard.bulkUploadDesc')}
         </p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <button style={s.csvBtn} onClick={() => csvInputRef.current?.click()} disabled={csvUploading}>
-            {csvUploading ? 'Uploading...' : '📁 Upload CSV'}
+            {csvUploading ? t('dashboard.uploading') : t('dashboard.uploadCsv')}
           </button>
           <button style={{ ...s.csvBtn, background: '#555' }} onClick={downloadCsvTemplate}>
-            📥 Download Template
+            {t('dashboard.downloadTemplate')}
           </button>
           <input
             ref={csvInputRef}
@@ -722,12 +716,12 @@ export default function Dashboard() {
             {csvResult.text}
             {csvResult.details && csvResult.details.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 12 }}>
-                <strong>Errors:</strong>
+                <strong>{t('common.errors')}:</strong>
                 <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                   {csvResult.details.slice(0, 10).map((err, i) => (
-                    <li key={i}>Row {err.row}: {err.error}</li>
+                    <li key={i}>{t('common.row', { n: err.row })}: {err.error}</li>
                   ))}
-                  {csvResult.details.length > 10 && <li>...and {csvResult.details.length - 10} more errors</li>}
+                  {csvResult.details.length > 10 && <li>{t('common.andMore', { n: csvResult.details.length - 10 })}</li>}
                 </ul>
               </div>
             )}
@@ -737,14 +731,14 @@ export default function Dashboard() {
 
       {/* Profile edit */}
       <div style={{ ...s.card, marginTop: 24 }}>
-        <h3 style={{ marginBottom: 16, color: '#333' }}>My Farmer Profile</h3>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>{t('dashboard.myProfile')}</h3>
         {profileMsg && (
           <div style={{ ...s.msg, background: profileMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: profileMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
             {profileMsg.text}
           </div>
         )}
         <form onSubmit={handleProfileSave}>
-          <label style={s.label}>Avatar</label>
+          <label style={s.label}>{t('dashboard.avatar')}</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
             {avatarPreview
               ? <img src={avatarPreview} alt="Avatar" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }} />
@@ -752,7 +746,7 @@ export default function Dashboard() {
             }
             <div>
               <button type="button" style={{ ...s.btn, fontSize: 13, padding: '7px 14px' }} onClick={() => avatarInputRef.current?.click()}>
-                {avatarUploading ? 'Uploading...' : 'Change Avatar'}
+                {avatarUploading ? t('dashboard.uploading') : t('dashboard.changeAvatar')}
               </button>
               <input
                 ref={avatarInputRef}
@@ -768,26 +762,26 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <label style={s.label}>Location</label>
+          <label style={s.label}>{t('dashboard.location')}</label>
           <input
             style={s.input}
-            placeholder="e.g. Nairobi, Kenya"
+            placeholder={t('dashboard.locationPlaceholder')}
             value={profile.location}
             onChange={e => setProfile(p => ({ ...p, location: e.target.value }))}
             maxLength={100}
           />
 
-          <label style={s.label}>Bio</label>
+          <label style={s.label}>{t('dashboard.bio')}</label>
           <textarea
             style={s.textarea}
-            placeholder="Tell buyers about your farm..."
+            placeholder={t('dashboard.bioPlaceholder')}
             value={profile.bio}
             onChange={e => setProfile(p => ({ ...p, bio: e.target.value }))}
             maxLength={500}
           />
 
           <label style={s.label}>
-            Federation Name <span style={{ color: '#aaa', fontWeight: 400 }}>(optional · e.g. yourname → yourname*{window.location.hostname})</span>
+            {t('dashboard.federationName')} <span style={{ color: '#aaa', fontWeight: 400 }}>(optional · e.g. yourname → yourname*{window.location.hostname})</span>
           </label>
           <input
             style={s.input}
@@ -797,17 +791,17 @@ export default function Dashboard() {
             maxLength={64}
           />
 
-          <button style={s.btn} type="submit" disabled={avatarUploading}>Save Profile</button>
+          <button style={s.btn} type="submit" disabled={avatarUploading}>{t('dashboard.saveProfile')}</button>
         </form>
       </div>
 
       {/* Order management panel */}
       <div style={{ ...s.card, marginTop: 24 }}>
         <h3 style={{ padding: '16px 20px', borderBottom: '1px solid #eee', margin: 0, color: '#333' }}>
-          📋 Incoming Orders ({sales.length})
+          📋 {t('dashboard.incomingOrders', { count: sales.length })}
         </h3>
         {sales.length === 0 ? (
-          <p style={{ padding: '20px', color: '#888', fontSize: 14 }}>No orders yet.</p>
+          <p style={{ padding: '20px', color: '#888', fontSize: 14 }}>{t('dashboard.noOrders')}</p>
         ) : (
           sales.map(o => {
             const m = salesMsg[o.id];
@@ -838,7 +832,7 @@ export default function Dashboard() {
                         defaultValue=""
                         onChange={e => { if (e.target.value) handleStatusUpdate(o.id, e.target.value); e.target.value = ''; }}
                       >
-                        <option value="" disabled>Update status…</option>
+                        <option value="" disabled>{t('dashboard.updateStatus')}</option>
                         {FARMER_STATUSES.filter(s => s !== o.status).map(s => (
                           <option key={s} value={s}>{STATUS_ICON[s]} {s}</option>
                         ))}
@@ -862,7 +856,7 @@ export default function Dashboard() {
             style={{ background: '#fff', borderRadius: 16, padding: 32, maxWidth: 340, width: '90%', textAlign: 'center', boxShadow: '0 8px 32px #0003' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#2d6a4f', marginBottom: 4 }}>📱 Product QR Code</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#2d6a4f', marginBottom: 4 }}>{t('dashboard.productQr')}</div>
             <div style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>{qrProductName}</div>
             <img
               src={`/api/products/${qrProductId}/qr`}
@@ -875,13 +869,13 @@ export default function Dashboard() {
                 download={`product-${qrProductId}-qr.png`}
                 style={{ ...s.btn, textDecoration: 'none', fontSize: 13, padding: '8px 18px', background: '#218c74' }}
               >
-                ⬇ Download
+                {t('dashboard.download')}
               </a>
               <button
                 style={{ ...s.btn, fontSize: 13, padding: '8px 18px', background: '#888' }}
                 onClick={() => setQrProductId(null)}
               >
-                Close
+                {t('dashboard.close')}
               </button>
             </div>
           </div>

@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { validateLogin, validateRegister, validatePassword } from '../utils/validation';
-<<<<<<< feature/human-friendly-errors
 import { getErrorMessage } from '../utils/errorMessages';
-=======
->>>>>>> main
+import { useTranslation } from 'react-i18next';
 
 const s = {
   wrap: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -21,15 +19,15 @@ const s = {
   err: { color: '#c0392b', fontSize: 12, marginTop: 4 },
   formErr: { color: '#c0392b', fontSize: 13, marginTop: 8, padding: '8px 12px', background: '#fff0f0', borderRadius: 6 },
   link: { display: 'block', textAlign: 'center', marginTop: 16, color: '#2d6a4f', fontSize: 14 },
-  strengthBar: { height: 4, borderRadius: 2, marginTop: 6, transition: 'width 0.3s, background 0.3s' },
   strengthHint: { fontSize: 11, color: '#888', marginTop: 3 },
 };
 
 function PasswordStrength({ password }) {
+  const { t } = useTranslation();
   const issues = validatePassword(password);
-  const score = 4 - issues.length; // 0–4
+  const score = 4 - issues.length;
   const colors = ['#c0392b', '#e67e22', '#f1c40f', '#27ae60', '#2d6a4f'];
-  const labels = ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'];
+  const labelKeys = ['auth.passwordStrength.veryWeak', 'auth.passwordStrength.weak', 'auth.passwordStrength.fair', 'auth.passwordStrength.good', 'auth.passwordStrength.strong'];
   if (!password) return null;
   return (
     <div>
@@ -38,15 +36,16 @@ function PasswordStrength({ password }) {
           <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i < score ? colors[score] : '#e0e0e0' }} />
         ))}
       </div>
-      <div style={{ ...s.strengthHint, color: colors[score] }}>{labels[score]}</div>
+      <div style={{ ...s.strengthHint, color: colors[score] }}>{t(labelKeys[score])}</div>
       {issues.length > 0 && (
-        <div style={s.strengthHint}>Needs: {issues.join(', ')}</div>
+        <div style={s.strengthHint}>{t('auth.passwordStrength.needs', { issues: issues.join(', ') })}</div>
       )}
     </div>
   );
 }
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
@@ -55,7 +54,6 @@ export function LoginPage() {
 
   function handleChange(field, value) {
     setForm(f => ({ ...f, [field]: value }));
-    // Clear field error on change
     if (errors[field]) setErrors(e => ({ ...e, [field]: '' }));
   }
 
@@ -69,53 +67,38 @@ export function LoginPage() {
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
-<<<<<<< feature/human-friendly-errors
       setFormError(getErrorMessage(err));
-=======
-      setFormError(err.message);
->>>>>>> main
     }
   }
 
   return (
     <div style={s.wrap}>
       <div style={s.card}>
-        <div style={s.title}>🌿 Welcome back</div>
+        <div style={s.title}>{t('auth.welcomeBack')}</div>
         <form onSubmit={handleSubmit} noValidate>
           <div style={s.field}>
-            <label style={s.label} htmlFor="login-email">Email</label>
-            <input
-              id="login-email"
-              style={errors.email ? s.inputErr : s.input}
-              type="email"
-              value={form.email}
-              onChange={e => handleChange('email', e.target.value)}
-              autoComplete="email"
-            />
+            <label style={s.label} htmlFor="login-email">{t('auth.email')}</label>
+            <input id="login-email" style={errors.email ? s.inputErr : s.input} type="email"
+              value={form.email} onChange={e => handleChange('email', e.target.value)} autoComplete="email" />
             {errors.email && <div style={s.err} role="alert">{errors.email}</div>}
           </div>
           <div style={s.field}>
-            <label style={s.label} htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              style={errors.password ? s.inputErr : s.input}
-              type="password"
-              value={form.password}
-              onChange={e => handleChange('password', e.target.value)}
-              autoComplete="current-password"
-            />
+            <label style={s.label} htmlFor="login-password">{t('auth.password')}</label>
+            <input id="login-password" style={errors.password ? s.inputErr : s.input} type="password"
+              value={form.password} onChange={e => handleChange('password', e.target.value)} autoComplete="current-password" />
             {errors.password && <div style={s.err} role="alert">{errors.password}</div>}
           </div>
           {formError && <div style={s.formErr} role="alert">{formError}</div>}
-          <button style={s.btn} type="submit">Login</button>
+          <button style={s.btn} type="submit">{t('auth.loginBtn')}</button>
         </form>
-        <Link to="/register" style={s.link}>Don't have an account? Register</Link>
+        <Link to="/register" style={s.link}>{t('auth.noAccount')}</Link>
       </div>
     </div>
   );
 }
 
 export function RegisterPage() {
+  const { t } = useTranslation();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'buyer' });
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
@@ -123,11 +106,6 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get('ref');
-
-  function handleChange(field, value) {
-    setForm(f => ({ ...f, [field]: value }));
-    if (errors[field]) setErrors(e => ({ ...e, [field]: '' }));
-  }
 
   function handleChange(field, value) {
     setForm(f => ({ ...f, [field]: value }));
@@ -144,72 +122,45 @@ export function RegisterPage() {
       login(token, user);
       navigate(user.role === 'farmer' ? '/dashboard' : '/marketplace');
     } catch (err) {
-<<<<<<< feature/human-friendly-errors
       setFormError(getErrorMessage(err));
-=======
-      setFormError(err.message);
->>>>>>> main
     }
   }
 
   return (
     <div style={s.wrap}>
       <div style={s.card}>
-        <div style={s.title}>🌱 Create Account</div>
+        <div style={s.title}>{t('auth.createAccount')}</div>
         <form onSubmit={handleSubmit} noValidate>
           <div style={s.field}>
-            <label style={s.label} htmlFor="reg-name">Name</label>
-            <input
-              id="reg-name"
-              style={errors.name ? s.inputErr : s.input}
-              type="text"
-              value={form.name}
-              onChange={e => handleChange('name', e.target.value)}
-              autoComplete="name"
-            />
+            <label style={s.label} htmlFor="reg-name">{t('auth.name')}</label>
+            <input id="reg-name" style={errors.name ? s.inputErr : s.input} type="text"
+              value={form.name} onChange={e => handleChange('name', e.target.value)} autoComplete="name" />
             {errors.name && <div style={s.err} role="alert">{errors.name}</div>}
           </div>
           <div style={s.field}>
-            <label style={s.label} htmlFor="reg-email">Email</label>
-            <input
-              id="reg-email"
-              style={errors.email ? s.inputErr : s.input}
-              type="email"
-              value={form.email}
-              onChange={e => handleChange('email', e.target.value)}
-              autoComplete="email"
-            />
+            <label style={s.label} htmlFor="reg-email">{t('auth.email')}</label>
+            <input id="reg-email" style={errors.email ? s.inputErr : s.input} type="email"
+              value={form.email} onChange={e => handleChange('email', e.target.value)} autoComplete="email" />
             {errors.email && <div style={s.err} role="alert">{errors.email}</div>}
           </div>
           <div style={s.field}>
-            <label style={s.label} htmlFor="reg-password">Password</label>
-            <input
-              id="reg-password"
-              style={errors.password ? s.inputErr : s.input}
-              type="password"
-              value={form.password}
-              onChange={e => handleChange('password', e.target.value)}
-              autoComplete="new-password"
-            />
+            <label style={s.label} htmlFor="reg-password">{t('auth.password')}</label>
+            <input id="reg-password" style={errors.password ? s.inputErr : s.input} type="password"
+              value={form.password} onChange={e => handleChange('password', e.target.value)} autoComplete="new-password" />
             <PasswordStrength password={form.password} />
             {errors.password && <div style={s.err} role="alert">{errors.password}</div>}
           </div>
           <div style={s.field}>
-            <label style={s.label} htmlFor="reg-role">I am a...</label>
-            <select
-              id="reg-role"
-              style={s.select}
-              value={form.role}
-              onChange={e => handleChange('role', e.target.value)}
-            >
-              <option value="buyer">Buyer</option>
-              <option value="farmer">Farmer</option>
+            <label style={s.label} htmlFor="reg-role">{t('auth.iAm')}</label>
+            <select id="reg-role" style={s.select} value={form.role} onChange={e => handleChange('role', e.target.value)}>
+              <option value="buyer">{t('auth.buyer')}</option>
+              <option value="farmer">{t('auth.farmer')}</option>
             </select>
           </div>
           {formError && <div style={s.formErr} role="alert">{formError}</div>}
-          <button style={s.btn} type="submit">Create Account</button>
+          <button style={s.btn} type="submit">{t('auth.registerBtn')}</button>
         </form>
-        <Link to="/login" style={s.link}>Already have an account? Login</Link>
+        <Link to="/login" style={s.link}>{t('auth.haveAccount')}</Link>
       </div>
     </div>
   );
