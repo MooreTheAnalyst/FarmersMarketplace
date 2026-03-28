@@ -329,13 +329,9 @@ export default function ProductDetail() {
         product_id: product.id,
         quantity: qty,
         address_id: selectedAddressId || undefined,
+        use_soroban_escrow: useEscrow,
       });
-      if (useEscrow) {
-        const escrowRes = await api.fundEscrow(res.orderId);
-        setResult({ ...res, escrow: true, balanceId: escrowRes.balanceId });
-      } else {
-        setResult(res);
-      }
+      setResult({ ...res, escrow: useEscrow });
     } catch (e) {
       setError(getStellarErrorMessage(e) || getErrorMessage(e));
     } finally {
@@ -384,19 +380,13 @@ export default function ProductDetail() {
                 <strong>Payment held in escrow!</strong>
                 <p style={{ marginTop: 8, fontSize: 14 }}>
                   Order #{result.orderId} · {result.totalPrice} XLM locked in
-                  Stellar Claimable Balance
+                  {result.sorobanEscrow ? ' Soroban escrow contract' : ' Stellar claimable balance'}
                 </p>
-                <p style={{ marginTop: 4, fontSize: 12, color: "#555" }}>
-                  Balance ID:{" "}
-                  <a
-                    href={`https://stellar.expert/explorer/testnet/claimable-balance/${result.balanceId}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "#2d6a4f", wordBreak: "break-all" }}
-                  >
-                    {result.balanceId}
-                  </a>
-                </p>
+                {result.claimableBalanceId ? (
+                  <p style={{ marginTop: 4, fontSize: 12, color: "#555" }}>
+                    Escrow Ref: {result.claimableBalanceId}
+                  </p>
+                ) : null}
                 <p style={{ marginTop: 4, fontSize: 12, color: "#888" }}>
                   The farmer can claim once delivery is confirmed. You can
                   reclaim after 14 days if undelivered.
@@ -435,6 +425,14 @@ export default function ProductDetail() {
   return (
     <div style={s.page}>
       <div style={s.card}>
+        {product.video_url ? (
+          <video
+            controls
+            src={product.video_url}
+            style={{ width: '100%', maxHeight: 280, borderRadius: 10, marginBottom: 16, background: '#000' }}
+          />
+        ) : null}
+
         {/* Image gallery */}
         {images.length > 0 ? (
           <div style={{ marginBottom: 16 }}>

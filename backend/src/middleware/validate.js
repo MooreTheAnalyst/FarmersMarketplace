@@ -53,6 +53,7 @@ module.exports = {
     product_id: z.coerce.number().int().positive('product_id must be a positive integer'),
     quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
     address_id: z.coerce.number().int().positive().optional(),
+    use_soroban_escrow: z.coerce.boolean().optional(),
   })),
 
   updateOrderStatus: validate(z.object({

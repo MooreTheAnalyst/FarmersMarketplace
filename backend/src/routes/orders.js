@@ -8,12 +8,14 @@ const {
   createClaimableBalance,
   createPreorderClaimableBalance,
   claimBalance,
+  invokeEscrowContract,
 } = require('../utils/stellar');
 const {
   sendOrderEmails,
   sendLowStockAlert,
   sendStatusUpdateEmail,
 } = require('../utils/mailer');
+const { sendPushToUser } = require('../utils/pushNotifications');
 const { err } = require('../middleware/error');
 const { getCachedResponse, cacheResponse } = require('../utils/idempotency');
 
@@ -45,6 +47,7 @@ router.post('/', auth, validate.order, async (req, res) => {
   if (req.user.role !== 'buyer') return err(res, 403, 'Only buyers can place orders', 'forbidden');
 
   const { product_id, address_id } = req.body;
+  const useSorobanEscrow = Boolean(req.body.use_soroban_escrow);
   const quantity = parseInt(req.body.quantity, 10);
   if (!product_id || Number.isNaN(quantity) || quantity < 1) {
     return err(res, 400, 'product_id and a positive quantity are required', 'validation_error');
@@ -154,7 +157,25 @@ router.post('/', auth, validate.order, async (req, res) => {
     let txHash;
     let balanceId = null;
 
-    if (product.is_preorder && product.preorder_delivery_date) {
+    if (useSorobanEscrow) {
+      const timeoutDays = parseInt(process.env.SOROBAN_ESCROW_TIMEOUT_DAYS || '14', 10);
+      const timeoutUnix = Math.floor(Date.now() / 1000) + timeoutDays * 24 * 60 * 60;
+      const soroban = await invokeEscrowContract({
+        action: 'deposit',
+        senderSecret: buyer.stellar_secret_key,
+        orderId,
+        buyerPublicKey: buyer.stellar_public_key,
+        farmerPublicKey: product.farmer_wallet,
+        amount: totalPrice,
+        timeoutUnix,
+      });
+      txHash = soroban.txHash;
+      balanceId = `soroban:${orderId}`;
+
+      db.prepare(
+        'UPDATE orders SET status = ?, stellar_tx_hash = ?, escrow_balance_id = ?, escrow_status = ? WHERE id = ?'
+      ).run('paid', txHash, balanceId, 'funded', orderId);
+    } else if (product.is_preorder && product.preorder_delivery_date) {
       const unlockAtUnix = parsePreorderUnlockUnix(product.preorder_delivery_date);
       if (!unlockAtUnix) {
         throw new Error('Invalid pre-order delivery date on product');
@@ -219,6 +240,12 @@ router.post('/', auth, validate.order, async (req, res) => {
       farmer,
     }).catch((mailErr) => console.error('Email notification failed:', mailErr.message));
 
+    sendPushToUser(farmer.id, {
+      title: 'New order received',
+      body: `${buyer.name} ordered ${quantity} ${product.unit || 'unit'} of ${product.name}`,
+      url: '/dashboard',
+    }).catch((pushErr) => console.error('Push notification failed:', pushErr.message));
+
     const updated = db.prepare(
       'SELECT quantity, low_stock_threshold, low_stock_alerted FROM products WHERE id = ?'
     ).get(product_id);
@@ -235,6 +262,7 @@ router.post('/', auth, validate.order, async (req, res) => {
       status: 'paid',
       txHash,
       totalPrice,
+      sorobanEscrow: useSorobanEscrow,
       preorder: !!product.is_preorder,
       preorderDeliveryDate: product.preorder_delivery_date || null,
       claimableBalanceId: balanceId,
@@ -468,6 +496,12 @@ router.patch('/:id/status', auth, async (req, res) => {
     buyer: { name: order.buyer_name, email: order.buyer_email },
     newStatus: status,
   }).catch((e) => console.error('Status email failed:', e.message));
+
+  sendPushToUser(order.buyer_id, {
+    title: 'Order status updated',
+    body: `Order #${order.id} is now ${status}`,
+    url: '/orders',
+  }).catch((pushErr) => console.error('Push notification failed:', pushErr.message));
   }).catch(e => console.error('Status email failed:', e.message));
 
   res.json({ success: true, message: 'Order status updated' });
@@ -528,7 +562,13 @@ router.post('/:id/claim', auth, async (req, res) => {
   const farmer = fRows[0];
 
   try {
-    const txHash = await claimBalance({ claimantSecret: farmer.stellar_secret_key, balanceId: order.escrow_balance_id });
+    const txHash = String(order.escrow_balance_id || '').startsWith('soroban:')
+      ? (await invokeEscrowContract({
+          action: 'release',
+          senderSecret: farmer.stellar_secret_key,
+          orderId: Number(order.id),
+        })).txHash
+      : await claimBalance({ claimantSecret: farmer.stellar_secret_key, balanceId: order.escrow_balance_id });
     await db.query('UPDATE orders SET escrow_status = $1, stellar_tx_hash = $2 WHERE id = $3', ['claimed', txHash, order.id]);
     res.json({ success: true, txHash });
   } catch (e) {
@@ -573,6 +613,60 @@ router.post('/:id/claim-preorder', auth, async (req, res) => {
     return res.json({ success: true, txHash, message: 'Pre-order payment claimed' });
   } catch (e) {
     return res.status(402).json({ success: false, message: 'Claim failed: ' + e.message, code: 'claim_failed' });
+  }
+});
+
+// POST /api/orders/:id/dispute - buyer or farmer opens Soroban escrow dispute
+router.post('/:id/dispute', auth, async (req, res) => {
+  const { rows } = await db.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+  const order = rows[0];
+  if (!order) return err(res, 404, 'Order not found', 'not_found');
+  if (order.buyer_id !== req.user.id && req.user.role !== 'farmer') {
+    return err(res, 403, 'Not allowed to dispute this order', 'forbidden');
+  }
+  if (!String(order.escrow_balance_id || '').startsWith('soroban:')) {
+    return err(res, 400, 'Order is not using Soroban escrow', 'invalid_state');
+  }
+
+  const { rows: uRows } = await db.query('SELECT stellar_secret_key FROM users WHERE id = $1', [req.user.id]);
+  if (!uRows[0]) return err(res, 404, 'User not found', 'not_found');
+
+  try {
+    const result = await invokeEscrowContract({
+      action: 'dispute',
+      senderSecret: uRows[0].stellar_secret_key,
+      orderId: Number(order.id),
+    });
+    return res.json({ success: true, txHash: result.txHash });
+  } catch (e) {
+    return res.status(402).json({ success: false, message: 'Dispute failed: ' + e.message, code: 'dispute_failed' });
+  }
+});
+
+// POST /api/orders/:id/refund - buyer requests Soroban refund after timeout
+router.post('/:id/refund', auth, async (req, res) => {
+  if (req.user.role !== 'buyer') return err(res, 403, 'Only buyers can request refunds', 'forbidden');
+
+  const { rows } = await db.query('SELECT * FROM orders WHERE id = $1 AND buyer_id = $2', [req.params.id, req.user.id]);
+  const order = rows[0];
+  if (!order) return err(res, 404, 'Order not found', 'not_found');
+  if (!String(order.escrow_balance_id || '').startsWith('soroban:')) {
+    return err(res, 400, 'Order is not using Soroban escrow', 'invalid_state');
+  }
+
+  const { rows: uRows } = await db.query('SELECT stellar_secret_key FROM users WHERE id = $1', [req.user.id]);
+  if (!uRows[0]) return err(res, 404, 'User not found', 'not_found');
+
+  try {
+    const result = await invokeEscrowContract({
+      action: 'refund',
+      senderSecret: uRows[0].stellar_secret_key,
+      orderId: Number(order.id),
+    });
+    await db.query('UPDATE orders SET escrow_status = $1, stellar_tx_hash = $2 WHERE id = $3', ['refunded', result.txHash, order.id]);
+    return res.json({ success: true, txHash: result.txHash });
+  } catch (e) {
+    return res.status(402).json({ success: false, message: 'Refund failed: ' + e.message, code: 'refund_failed' });
   }
 });
 

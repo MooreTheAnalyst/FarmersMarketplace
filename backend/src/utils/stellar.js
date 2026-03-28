@@ -266,6 +266,97 @@ async function getContractState(contractId, prefix = null) {
   return entries;
 }
 
+async function invokeEscrowContract({
+  action,
+  senderSecret,
+  orderId,
+  buyerPublicKey,
+  farmerPublicKey,
+  amount,
+  timeoutUnix,
+}) {
+  const contractId = process.env.SOROBAN_ESCROW_CONTRACT_ID;
+  const xlmTokenContractId = process.env.SOROBAN_XLM_TOKEN_CONTRACT_ID;
+  if (!contractId) {
+    throw new Error('SOROBAN_ESCROW_CONTRACT_ID is not configured');
+  }
+  if (!xlmTokenContractId) {
+    throw new Error('SOROBAN_XLM_TOKEN_CONTRACT_ID is not configured');
+  }
+
+  const keypair = StellarSdk.Keypair.fromSecret(senderSecret);
+  const source = await server.loadAccount(keypair.publicKey());
+  const sorobanRpcUrl =
+    process.env.SOROBAN_RPC_URL ||
+    (isTestnet ? 'https://soroban-testnet.stellar.org' : 'https://soroban.stellar.org');
+  const sorobanServer = new StellarSdk.SorobanRpc.Server(sorobanRpcUrl);
+  const contract = new StellarSdk.Contract(contractId);
+
+  let operation;
+  if (action === 'deposit') {
+    const amountStroops = BigInt(Math.round(Number(amount) * 10_000_000));
+    operation = contract.call(
+      'deposit',
+      StellarSdk.nativeToScVal(xlmTokenContractId, { type: 'address' }),
+      StellarSdk.nativeToScVal(Number(orderId), { type: 'u64' }),
+      StellarSdk.nativeToScVal(buyerPublicKey, { type: 'address' }),
+      StellarSdk.nativeToScVal(farmerPublicKey, { type: 'address' }),
+      StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+      StellarSdk.nativeToScVal(Number(timeoutUnix), { type: 'u64' })
+    );
+  } else if (action === 'release') {
+    operation = contract.call(
+      'release',
+      StellarSdk.nativeToScVal(xlmTokenContractId, { type: 'address' }),
+      StellarSdk.nativeToScVal(Number(orderId), { type: 'u64' })
+    );
+  } else if (action === 'refund') {
+    operation = contract.call(
+      'refund',
+      StellarSdk.nativeToScVal(xlmTokenContractId, { type: 'address' }),
+      StellarSdk.nativeToScVal(Number(orderId), { type: 'u64' })
+    );
+  } else if (action === 'dispute') {
+    operation = contract.call(
+      'dispute',
+      StellarSdk.nativeToScVal(Number(orderId), { type: 'u64' }),
+      StellarSdk.nativeToScVal(keypair.publicKey(), { type: 'address' })
+    );
+  } else {
+    throw new Error(`Unsupported Soroban escrow action: ${action}`);
+  }
+
+  let tx = new StellarSdk.TransactionBuilder(source, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(operation)
+    .setTimeout(60)
+    .build();
+
+  tx = await sorobanServer.prepareTransaction(tx);
+  tx.sign(keypair);
+
+  const sendResult = await sorobanServer.sendTransaction(tx);
+  if (sendResult.status === 'ERROR') {
+    throw new Error(sendResult.errorResultXdr || 'Soroban transaction submission failed');
+  }
+
+  const hash = sendResult.hash || tx.hash().toString('hex');
+  for (let i = 0; i < 15; i += 1) {
+    const txResult = await sorobanServer.getTransaction(hash);
+    if (txResult.status === 'SUCCESS') {
+      return { txHash: hash, contractId };
+    }
+    if (txResult.status === 'FAILED') {
+      throw new Error('Soroban transaction failed');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw new Error('Soroban transaction confirmation timed out');
+}
+
 // Resolve a federation address (e.g. farmer*farmersmarket.io) to a Stellar public key.
 // Pass the db instance for local domain lookups.
 async function resolveFederationAddress(address, db) {
@@ -314,6 +405,7 @@ module.exports = {
   createClaimableBalance,
   createPreorderClaimableBalance,
   claimBalance,
+  invokeEscrowContract,
   getContractState,
   resolveFederationAddress,
 };

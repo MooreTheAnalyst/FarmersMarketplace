@@ -46,6 +46,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(sanitizeResponse);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads/videos', express.static(path.join(__dirname, '../uploads/videos')));
 
 app.get('/api/csrf-token', csrfTokenHandler);
 
