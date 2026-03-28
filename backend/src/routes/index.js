@@ -54,6 +54,7 @@ router.use('/api/products',      require('./products'));
 router.use('/api/products',      require('./productVideos'));
 router.use('/api/products/:id/calendar', require('./calendar'));
 router.use('/api/orders',        require('./orders'));
+router.use('/api/orders/:id/return', require('./returns'));
 router.use('/api/waitlist',      require('./waitlist'));
 router.use('/api/wallet',        require('./alerts'));
 router.use('/api/wallet',        require('./wallet'));

@@ -553,11 +553,13 @@ router.get('/', auth, async (req, res) => {
   const { rows: data } = await db.query(
     `SELECT o.*, p.name as product_name, p.unit, u.name as farmer_name,
             a.label as address_label, a.street as address_street, a.city as address_city,
-            a.country as address_country, a.postal_code as address_postal_code
+            a.country as address_country, a.postal_code as address_postal_code,
+            rr.status as return_status, rr.reason as return_reason, rr.reject_reason, rr.refund_tx_hash
      FROM orders o
      JOIN products p ON o.product_id = p.id
      JOIN users u ON p.farmer_id = u.id
      LEFT JOIN addresses a ON o.address_id = a.id
+     LEFT JOIN return_requests rr ON rr.order_id = o.id
      ${where}
      ORDER BY o.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
     [...params, limit, offset]
@@ -633,11 +635,13 @@ router.get('/sales', auth, async (req, res) => {
   const { rows: data } = await db.query(
     `SELECT o.*, p.name as product_name, u.name as buyer_name,
             a.label as address_label, a.street as address_street, a.city as address_city,
-            a.country as address_country, a.postal_code as address_postal_code
+            a.country as address_country, a.postal_code as address_postal_code,
+            rr.status as return_status, rr.reason as return_reason, rr.reject_reason, rr.refund_tx_hash
      FROM orders o
      JOIN products p ON o.product_id = p.id
      JOIN users u ON o.buyer_id = u.id
      LEFT JOIN addresses a ON o.address_id = a.id
+     LEFT JOIN return_requests rr ON rr.order_id = o.id
      WHERE p.farmer_id = ?
      ORDER BY o.created_at DESC LIMIT ? OFFSET ?`
   ).all(req.user.id, limit, offset);
@@ -675,6 +679,7 @@ router.patch('/:id/status', auth, (req, res) => {
   if (!order) return err(res, 404, 'Order not found or not yours', 'not_found');
 
   db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, order.id);
+     LEFT JOIN return_requests rr ON rr.order_id = o.id
      WHERE p.farmer_id = $1
      ORDER BY o.created_at DESC LIMIT $2 OFFSET $3`,
     [req.user.id, limit, offset]
