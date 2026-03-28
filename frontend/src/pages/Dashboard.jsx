@@ -76,9 +76,13 @@ export default function Dashboard() {
   const [formErrors, setFormErrors] = useState({});
   const [sales, setSales] = useState([]);
   const [salesMsg, setSalesMsg] = useState({});
-  const [formErrors, setFormErrors] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // bundle state
+  const [bundles, setBundles] = useState([]);
+  const [bundleForm, setBundleForm] = useState({ name: '', description: '', price: '', items: [{ product_id: '', quantity: 1 }] });
+  const [bundleMsg, setBundleMsg] = useState(null);
 
   // image state
   const [imageFile, setImageFile] = useState(null);
@@ -231,14 +235,16 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [productsRes, salesRes, profileRes] = await Promise.all([
+      const [productsRes, salesRes, profileRes, bundlesRes] = await Promise.all([
         api.getMyProducts().catch(() => ({ data: [] })),
         api.getSales().catch(() => ({ data: [] })),
-        user?.id ? api.getFarmer(user.id).catch(() => ({})) : Promise.resolve({})
+        user?.id ? api.getFarmer(user.id).catch(() => ({})) : Promise.resolve({}),
+        api.getBundles().catch(() => ({ data: [] })),
       ]);
       
       setProducts(productsRes.data ?? productsRes);
       setSales(salesRes.data ?? salesRes);
+      setBundles((bundlesRes.data ?? []).filter(b => b.farmer_id === user?.id));
       
       if (profileRes.data) {
         const d = profileRes.data;
@@ -741,9 +747,88 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Bundle Listings */}
+      {user.role === 'farmer' && (
+        <div style={{ ...s.card, marginTop: 24 }}>
+          <h3 style={{ marginBottom: 16, color: '#333' }}>🎁 Bundle Deals</h3>
+          {bundleMsg && (
+            <div style={{ ...s.msg, background: bundleMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: bundleMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+              {bundleMsg.text}
+            </div>
+          )}
+          <form onSubmit={async e => {
+            e.preventDefault();
+            setBundleMsg(null);
+            const items = bundleForm.items.filter(i => i.product_id && i.quantity > 0).map(i => ({ product_id: parseInt(i.product_id), quantity: parseInt(i.quantity) }));
+            if (!bundleForm.name.trim()) return setBundleMsg({ type: 'err', text: 'Bundle name is required' });
+            if (items.length === 0) return setBundleMsg({ type: 'err', text: 'Add at least one product item' });
+            try {
+              await api.createBundle({ name: bundleForm.name, description: bundleForm.description, price: parseFloat(bundleForm.price), items });
+              setBundleMsg({ type: 'ok', text: 'Bundle created!' });
+              setBundleForm({ name: '', description: '', price: '', items: [{ product_id: '', quantity: 1 }] });
+              load();
+            } catch (err) { setBundleMsg({ type: 'err', text: err.message }); }
+          }}>
+            <label style={s.label}>Bundle Name</label>
+            <input style={s.input} value={bundleForm.name} onChange={e => setBundleForm(f => ({ ...f, name: e.target.value }))} required />
+            <label style={s.label}>Description (optional)</label>
+            <textarea style={s.textarea} value={bundleForm.description} onChange={e => setBundleForm(f => ({ ...f, description: e.target.value }))} />
+            <label style={s.label}>Bundle Price (XLM)</label>
+            <input style={s.input} type="number" min="0" step="any" value={bundleForm.price} onChange={e => setBundleForm(f => ({ ...f, price: e.target.value }))} required />
+            <label style={{ ...s.label, marginTop: 8 }}>Items</label>
+            {bundleForm.items.map((item, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+                <select
+                  style={{ ...s.input, flex: 2, marginBottom: 0 }}
+                  value={item.product_id}
+                  onChange={e => setBundleForm(f => { const items = [...f.items]; items[idx] = { ...items[idx], product_id: e.target.value }; return { ...f, items }; })}
+                >
+                  <option value="">Select product…</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.quantity} {p.unit})</option>)}
+                </select>
+                <input
+                  type="number" min="1" placeholder="Qty"
+                  style={{ ...s.input, width: 70, marginBottom: 0 }}
+                  value={item.quantity}
+                  onChange={e => setBundleForm(f => { const items = [...f.items]; items[idx] = { ...items[idx], quantity: parseInt(e.target.value) || 1 }; return { ...f, items }; })}
+                />
+                {bundleForm.items.length > 1 && (
+                  <button type="button" style={s.del} onClick={() => setBundleForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>✕</button>
+                )}
+              </div>
+            ))}
+            <button type="button" style={{ ...s.btn, background: '#555', fontSize: 12, padding: '5px 12px', marginBottom: 12 }}
+              onClick={() => setBundleForm(f => ({ ...f, items: [...f.items, { product_id: '', quantity: 1 }] }))}>
+              + Add Item
+            </button>
+            <br />
+            <button style={s.btn} type="submit">Create Bundle</button>
+          </form>
+
+          {bundles.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8, color: '#555' }}>My Bundles ({bundles.length})</div>
+              {bundles.map(b => (
+                <div key={b.id} style={{ ...s.product, flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{b.name}</div>
+                      <div style={{ fontSize: 13, color: '#666' }}>{b.price} XLM · {b.items?.length} item(s)</div>
+                    </div>
+                    <button style={s.del} onClick={async () => {
+                      if (!confirm('Remove this bundle?')) return;
+                      try { await api.deleteBundle(b.id); load(); } catch {}
+                    }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* CSV Bulk Upload */}
-      <div style={{ ...s.card, marginTop: 24 }}>
-        <h3 style={{ marginBottom: 16, color: '#333' }}>📤 Bulk Upload Products</h3>
+      <div style={{ ...s.card, marginTop: 24 }}>        <h3 style={{ marginBottom: 16, color: '#333' }}>📤 Bulk Upload Products</h3>
         <p style={{ fontSize: 14, color: '#666', marginBottom: 16 }}>
           Upload multiple products at once using a CSV file. Maximum 500 rows per upload.
         </p>

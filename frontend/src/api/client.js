@@ -246,6 +246,13 @@ export const api = {
     request(`/products/${productId}/alert`, { method: "DELETE" }),
   getMyAlert: (productId) => request(`/products/${productId}/alert/status`),
 
+  // Bundles
+  getBundles: () => request('/bundles'),
+  createBundle: (body) => request('/bundles', { method: 'POST', body }),
+  deleteBundle: (id) => request(`/bundles/${id}`, { method: 'DELETE' }),
+  purchaseBundle: (bundle_id) => request('/bundles/purchase', { method: 'POST', body: { bundle_id } }),
+  getBundleOrders: () => request('/bundles/orders'),
+
   // Product images (multi-image gallery)
   getProductImages: (productId) => request(`/products/${productId}/images`),
   uploadProductImages: (productId, files) => {
@@ -263,4 +270,11 @@ export const api = {
       method: "PATCH",
       body: { order },
     }),
+
+  // Subscriptions
+  getSubscriptions: () => request('/subscriptions'),
+  createSubscription: (body) => request('/subscriptions', { method: 'POST', body }),
+  cancelSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
+  pauseSubscription: (id) => request(`/subscriptions/${id}/pause`, { method: 'PATCH' }),
+  resumeSubscription: (id) => request(`/subscriptions/${id}/resume`, { method: 'PATCH' }),
 };

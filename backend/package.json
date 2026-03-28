@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "jest --forceExit"
+    "test": "jest --forceExit",
+    "migrate": "node migrate.js",
+    "migrate:rollback": "node migrate.js rollback"
   },
   "jest": {
     "testEnvironment": "node",
@@ -39,7 +41,9 @@
     "express-validator": "^7.3.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.2.1",
     "nodemailer": "^8.0.3",
+    "pg": "^8.20.0",
     "qrcode": "^1.5.4",
     "sanitize-html": "^2.17.2",
     "zod": "^4.3.6"

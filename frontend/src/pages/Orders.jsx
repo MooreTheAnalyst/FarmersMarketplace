@@ -85,13 +85,18 @@ export default function Orders() {
   const { user } = useAuth();
   const [claimingId, setClaimingId] = useState(null);
   const [claimError, setClaimError] = useState({});
+  const [bundleOrders, setBundleOrders] = useState([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getOrders();
+      const [data, bundleData] = await Promise.all([
+        api.getOrders(),
+        api.getBundleOrders().catch(() => ({ data: [] })),
+      ]);
       setAllOrders(Array.isArray(data) ? data : (data?.data ?? []));
+      setBundleOrders(bundleData?.data ?? []);
     } catch (err) {
       setError(err?.message || 'Failed to load orders');
       setAllOrders([]);
@@ -276,6 +281,40 @@ export default function Orders() {
             )}
           </div>
         </>
+      )}
+
+      {bundleOrders.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ ...s.title, fontSize: 20, marginBottom: 16 }}>🎁 Bundle Orders</div>
+          <div style={s.card}>
+            {bundleOrders.map(o => (
+              <div key={o.id} style={s.row}>
+                <div>
+                  <div style={s.name}>{o.bundle_name}</div>
+                  {o.bundle_description && <div style={s.meta}>{o.bundle_description}</div>}
+                  <div style={s.meta}>
+                    {new Date(o.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </div>
+                  {o.stellar_tx_hash && (
+                    <div style={s.hash}>
+                      TX:{' '}
+                      <a href={`https://stellar.expert/explorer/testnet/tx/${o.stellar_tx_hash}`} target="_blank" rel="noreferrer" style={{ color: '#2d6a4f' }}>
+                        {o.stellar_tx_hash}
+                      </a>
+                    </div>
+                  )}
+                </div>
+                <div style={s.right}>
+                  <span style={{ ...s.badge, background: STATUS_STYLE[o.status]?.bg || '#eee', color: STATUS_STYLE[o.status]?.color || '#333' }}>
+                    {STATUS_ICON[o.status]} {o.status}
+                  </span>
+                  <span style={s.price}>{parseFloat(o.total_price).toFixed(2)} XLM</span>
+                  <span style={{ ...s.badge, background: '#fff3cd', color: '#856404', fontSize: 11 }}>Bundle</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
