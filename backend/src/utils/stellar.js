@@ -304,14 +304,78 @@ async function resolveFederationAddress(address, db) {
   }
 }
 
+async function getAllBalances(publicKey) {
+  try {
+    const account = await server.loadAccount(publicKey);
+    return account.balances.map((b) => ({
+      asset_type: b.asset_type,
+      asset_code: b.asset_type === 'native' ? 'XLM' : b.asset_code,
+      asset_issuer: b.asset_type === 'native' ? null : b.asset_issuer,
+      balance: parseFloat(b.balance),
+      limit: b.limit ? parseFloat(b.limit) : null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function addTrustline({ secret, assetCode, assetIssuer }) {
+  const keypair = StellarSdk.Keypair.fromSecret(secret);
+  const account = await server.loadAccount(keypair.publicKey());
+  const asset = new StellarSdk.Asset(assetCode, assetIssuer);
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(StellarSdk.Operation.changeTrust({ asset }))
+    .setTimeout(30)
+    .build();
+
+  tx.sign(keypair);
+  const result = await server.submitTransaction(tx);
+  return result.hash;
+}
+
+async function removeTrustline({ secret, assetCode, assetIssuer }) {
+  const keypair = StellarSdk.Keypair.fromSecret(secret);
+  const account = await server.loadAccount(keypair.publicKey());
+  const asset = new StellarSdk.Asset(assetCode, assetIssuer);
+
+  // Check balance is zero before removing
+  const existing = account.balances.find(
+    (b) => b.asset_code === assetCode && b.asset_issuer === assetIssuer,
+  );
+  if (existing && parseFloat(existing.balance) > 0) {
+    const e = new Error('Cannot remove trustline with non-zero balance');
+    e.code = 'non_zero_balance';
+    throw e;
+  }
+
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(StellarSdk.Operation.changeTrust({ asset, limit: '0' }))
+    .setTimeout(30)
+    .build();
+
+  tx.sign(keypair);
+  const result = await server.submitTransaction(tx);
+  return result.hash;
+}
+
 module.exports = {
   isTestnet,
   server,
   createWallet,
   fundTestnetAccount,
   getBalance,
+  getAllBalances,
   sendPayment,
   getTransactions,
+  addTrustline,
+  removeTrustline,
   createClaimableBalance,
   createPreorderClaimableBalance,
   claimBalance,
