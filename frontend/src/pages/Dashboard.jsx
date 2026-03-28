@@ -19,6 +19,8 @@ export default function Dashboard() {
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState({ name: '', description: '', price: '', quantity: '', unit: 'kg', category: 'other' });
   const [msg, setMsg] = useState(null);
+  const [auctionForm, setAuctionForm] = useState({ product_id: '', start_price: '', ends_at: '' });
+  const [auctionMsg, setAuctionMsg] = useState(null);
 
   async function load() {
     try { setProducts(await api.getMyProducts()); } catch {}
@@ -42,6 +44,22 @@ export default function Dashboard() {
   async function handleDelete(id) {
     if (!confirm('Remove this product?')) return;
     try { await api.deleteProduct(id); load(); } catch {}
+  }
+
+  async function handleCreateAuction(e) {
+    e.preventDefault();
+    setAuctionMsg(null);
+    try {
+      await api.createAuction({
+        product_id: parseInt(auctionForm.product_id),
+        start_price: parseFloat(auctionForm.start_price),
+        ends_at: new Date(auctionForm.ends_at).toISOString(),
+      });
+      setAuctionMsg({ type: 'ok', text: 'Auction created!' });
+      setAuctionForm({ product_id: '', start_price: '', ends_at: '' });
+    } catch (err) {
+      setAuctionMsg({ type: 'err', text: err.message });
+    }
   }
 
   return (
@@ -83,6 +101,23 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div style={{ ...s.card, marginTop: 24, maxWidth: 440 }}>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>🔨 Create Auction</h3>
+        {auctionMsg && <div style={{ ...s.msg, background: auctionMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: auctionMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>{auctionMsg.text}</div>}
+        <form onSubmit={handleCreateAuction}>
+          <label style={s.label}>Product</label>
+          <select style={s.input} value={auctionForm.product_id} onChange={e => setAuctionForm({ ...auctionForm, product_id: e.target.value })} required>
+            <option value="">Select a product</option>
+            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <label style={s.label}>Starting Price (XLM)</label>
+          <input style={s.input} type="number" min="0.01" step="0.01" value={auctionForm.start_price} onChange={e => setAuctionForm({ ...auctionForm, start_price: e.target.value })} required />
+          <label style={s.label}>Ends At</label>
+          <input style={s.input} type="datetime-local" value={auctionForm.ends_at} onChange={e => setAuctionForm({ ...auctionForm, ends_at: e.target.value })} required />
+          <button style={{ ...s.btn, background: '#e07b00' }} type="submit">Create Auction</button>
+        </form>
       </div>
     </div>
   );

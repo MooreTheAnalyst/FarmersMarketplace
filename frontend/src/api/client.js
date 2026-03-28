@@ -40,4 +40,9 @@ export const api = {
   getWallet: () => request('/wallet'),
   getTransactions: () => request('/wallet/transactions'),
   fundWallet: () => request('/wallet/fund', { method: 'POST' }),
+
+  getAuctions: () => request('/auctions'),
+  getAuction: (id) => request(`/auctions/${id}`),
+  createAuction: (body) => request('/auctions', { method: 'POST', body }),
+  placeBid: (id, body) => request(`/auctions/${id}/bid`, { method: 'POST', body }),
 };

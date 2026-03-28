@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import AuctionCard from '../components/AuctionCard';
 
 const CATEGORIES = ['all', 'vegetables', 'fruits', 'grains', 'dairy', 'herbs', 'other'];
 
@@ -29,6 +30,7 @@ const EMPTY_FILTERS = { search: '', category: '', minPrice: '', maxPrice: '', av
 
 export default function Marketplace() {
   const [products, setProducts] = useState([]);
+  const [auctions, setAuctions] = useState([]);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -41,7 +43,9 @@ export default function Marketplace() {
       if (f.minPrice)  params.minPrice = f.minPrice;
       if (f.maxPrice)  params.maxPrice = f.maxPrice;
       if (f.available) params.available = f.available;
-      setProducts(await api.getProducts(params));
+      const [prods, aucs] = await Promise.all([api.getProducts(params), api.getAuctions()]);
+      setProducts(prods);
+      setAuctions(aucs.data || []);
     } catch {}
     setLoading(false);
   }, []);
@@ -71,6 +75,15 @@ export default function Marketplace() {
     <div style={s.page}>
       <div style={s.title}>🛒 Marketplace</div>
       <div style={s.sub}>Fresh produce directly from local farmers</div>
+
+      {auctions.length > 0 && (
+        <div style={{ marginBottom: 36 }}>
+          <div style={{ ...s.title, fontSize: 20, marginBottom: 12 }}>🔨 Live Auctions</div>
+          <div style={s.grid}>
+            {auctions.map(a => <AuctionCard key={a.id} auction={a} onBid={() => load(filters)} />)}
+          </div>
+        </div>
+      )}
 
       <div style={s.filters}>
         <input

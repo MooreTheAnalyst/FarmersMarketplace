@@ -42,6 +42,33 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS auctions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    farmer_id INTEGER NOT NULL,
+    start_price REAL NOT NULL,
+    current_bid REAL,
+    highest_bidder_id INTEGER,
+    ends_at DATETIME NOT NULL,
+    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'closed', 'cancelled')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (farmer_id) REFERENCES users(id),
+    FOREIGN KEY (highest_bidder_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS bids (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    auction_id INTEGER NOT NULL,
+    buyer_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (auction_id) REFERENCES auctions(id),
+    FOREIGN KEY (buyer_id) REFERENCES users(id)
+  );
+`);
+
 // Migrate existing DB: add category column if missing
 try { db.exec(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`); } catch {}
 
