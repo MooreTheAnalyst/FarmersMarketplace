@@ -38,6 +38,7 @@ export default function Navbar() {
             {user.role === 'buyer' && <Link to="/addresses" style={s.link}>Addresses</Link>}
             {user.role === 'admin' && <Link to="/admin" style={{ ...s.link, color: '#ffeaa7' }}>Admin</Link>}
             {user.role !== 'admin' && <Link to="/wallet" style={s.link}>Wallet</Link>}
+            <Link to="/settings" style={s.link}>Settings</Link>
             <span style={{ color: '#d8f3dc', fontSize: 13 }}>{user.name} ({user.role})</span>
             <button style={s.toggleBtn} onClick={toggleTheme} aria-label="Toggle dark mode" title="Toggle dark mode">
               {theme === 'light' ? '🌙' : '☀️'}

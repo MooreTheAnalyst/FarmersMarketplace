@@ -18,6 +18,8 @@ import FarmerProfile from './pages/FarmerProfile';
 
 import AdminDashboard from './pages/AdminDashboard';
 import AddressBook from './pages/AddressBook';
+import Settings from './pages/Settings';
+import { AccountRecovery } from './pages/Settings';
 
 function PrivateRoute({ children, role }) {
   const { user, loading } = useAuth();
@@ -62,6 +64,8 @@ function AppContent() {
           <Route path="/admin" element={<PrivateRoute role="admin"><AdminDashboard /></PrivateRoute>} />
           <Route path="/farmer/:id" element={<FarmerProfile />} />
           <Route path="/addresses" element={<PrivateRoute role="buyer"><AddressBook /></PrivateRoute>} />
+          <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+          <Route path="/recover" element={<AccountRecovery />} />
         </Routes>
       </div>
     </>

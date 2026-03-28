@@ -86,6 +86,7 @@ try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch
 try { db.exec(`ALTER TABLE users ADD COLUMN federation_name TEXT UNIQUE`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
 try { db.exec(`ALTER TABLE users ADD COLUMN referral_bonus_sent INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN stellar_mnemonic TEXT`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
 try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
   module.exports = pg;
@@ -178,6 +179,7 @@ try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT
     `ALTER TABLE users ADD COLUMN federation_name TEXT UNIQUE`,
     `ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`,
     `ALTER TABLE users ADD COLUMN referral_bonus_sent INTEGER DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN stellar_mnemonic TEXT`,
     `CREATE TABLE IF NOT EXISTS product_images (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL,

@@ -1,4 +1,6 @@
 const StellarSdk = require("@stellar/stellar-sdk");
+const bip39 = require("bip39");
+const StellarHDWallet = require("stellar-hd-wallet");
 
 const STELLAR_NETWORK = (
   process.env.STELLAR_NETWORK || "testnet"
@@ -35,6 +37,34 @@ const networkPassphrase = isTestnet
 
 function createWallet() {
   const keypair = StellarSdk.Keypair.random();
+  return { publicKey: keypair.publicKey(), secretKey: keypair.secret() };
+}
+
+/**
+ * Generate a BIP39 mnemonic and derive a Stellar keypair from it.
+ * Returns { mnemonic, publicKey, secretKey }
+ */
+function createWalletFromMnemonic() {
+  const mnemonic = bip39.generateMnemonic(256); // 24-word phrase
+  const wallet = StellarHDWallet.fromMnemonic(mnemonic);
+  const keypair = StellarSdk.Keypair.fromSecret(wallet.getSecret(0));
+  return {
+    mnemonic,
+    publicKey: keypair.publicKey(),
+    secretKey: keypair.secret(),
+  };
+}
+
+/**
+ * Derive a Stellar keypair from an existing BIP39 mnemonic.
+ * Returns { publicKey, secretKey }
+ */
+function deriveKeypairFromMnemonic(mnemonic) {
+  if (!bip39.validateMnemonic(mnemonic)) {
+    throw new Error("Invalid mnemonic phrase");
+  }
+  const wallet = StellarHDWallet.fromMnemonic(mnemonic);
+  const keypair = StellarSdk.Keypair.fromSecret(wallet.getSecret(0));
   return { publicKey: keypair.publicKey(), secretKey: keypair.secret() };
 }
 
@@ -308,6 +338,8 @@ module.exports = {
   isTestnet,
   server,
   createWallet,
+  createWalletFromMnemonic,
+  deriveKeypairFromMnemonic,
   fundTestnetAccount,
   getBalance,
   sendPayment,

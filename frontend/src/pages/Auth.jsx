@@ -92,6 +92,7 @@ export function LoginPage() {
           <button style={s.btn} type="submit">{t('auth.loginBtn')}</button>
         </form>
         <Link to="/register" style={s.link}>{t('auth.noAccount')}</Link>
+        <Link to="/recover" style={{ ...s.link, fontSize: 12, color: '#888' }}>Lost wallet access? Recover with seed phrase</Link>
       </div>
     </div>
   );

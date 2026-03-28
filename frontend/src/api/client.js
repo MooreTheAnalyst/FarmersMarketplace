@@ -342,4 +342,8 @@ export const api = {
   cancelSubscription: (id) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   pauseSubscription: (id) => request(`/subscriptions/${id}/pause`, { method: 'PATCH' }),
   resumeSubscription: (id) => request(`/subscriptions/${id}/resume`, { method: 'PATCH' }),
+
+  // Seed phrase backup & recovery
+  getSeedPhrase: (password) => request('/auth/seed-phrase', { method: 'POST', body: { password } }),
+  recoverAccount: (body) => request('/auth/recover', { method: 'POST', body }),
 };
