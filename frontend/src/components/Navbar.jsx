@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 const s = {
   nav: { background: '#2d6a4f', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
@@ -10,12 +11,14 @@ const s = {
   link: { color: '#d8f3dc', textDecoration: 'none', fontSize: 14 },
   btn: { background: '#95d5b2', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 600 },
   toggleBtn: { background: 'none', border: '1px solid #95d5b2', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontSize: 16, color: '#d8f3dc' },
+  langSelect: { background: 'none', border: '1px solid #95d5b2', borderRadius: 6, padding: '5px 8px', cursor: 'pointer', fontSize: 13, color: '#d8f3dc' },
 };
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
 
   function handleLogout() {
     logout();
@@ -24,7 +27,7 @@ export default function Navbar() {
 
   return (
     <nav style={s.nav}>
-      <Link to="/" style={s.brand}>🌿 FarmersMarket</Link>
+      <Link to="/" style={s.brand}>{t('nav.brand')}</Link>
       <div style={s.links}>
         {user ? (
           <>
@@ -36,17 +39,26 @@ export default function Navbar() {
             {user.role === 'admin' && <Link to="/admin" style={{ ...s.link, color: '#ffeaa7' }}>Admin</Link>}
             {user.role !== 'admin' && <Link to="/wallet" style={s.link}>Wallet</Link>}
             <span style={{ color: '#d8f3dc', fontSize: 13 }}>{user.name} ({user.role})</span>
-          <button style={s.toggleBtn} onClick={toggleTheme} aria-label="Toggle dark mode" title="Toggle dark mode">
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <button style={s.btn} onClick={handleLogout}>Logout</button>
+            <button style={s.toggleBtn} onClick={toggleTheme} aria-label="Toggle dark mode" title="Toggle dark mode">
+              {theme === 'light' ? '🌙' : '☀️'}
+            </button>
+            <button style={s.btn} onClick={handleLogout}>{t('nav.logout')}</button>
           </>
         ) : (
           <>
-            <Link to="/login" style={s.link}>Login</Link>
-            <Link to="/register" style={s.link}>Register</Link>
+            <Link to="/login" style={s.link}>{t('nav.login')}</Link>
+            <Link to="/register" style={s.link}>{t('nav.register')}</Link>
           </>
         )}
+        <select
+          style={s.langSelect}
+          value={i18n.language}
+          onChange={e => i18n.changeLanguage(e.target.value)}
+          aria-label="Select language"
+        >
+          <option value="en">EN</option>
+          <option value="sw">SW</option>
+        </select>
       </div>
     </nav>
   );

@@ -57,6 +57,48 @@ async function rotateRefreshToken(userId, oldRawToken) {
   return newRawToken;
 }
 
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Authentication and session management
+ */
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, email, password, role]
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string, format: email }
+ *               password: { type: string, minLength: 8 }
+ *               role: { type: string, enum: [farmer, buyer] }
+ *               ref: { type: string, description: Referral code }
+ *     responses:
+ *       200:
+ *         description: Registration successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string, description: JWT access token }
+ *                 user: { $ref: '#/components/schemas/User' }
+ *       409:
+ *         description: Email already exists
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/auth/register
 router.post('/register', validate.register, async (req, res) => {
   const { name, email, password, role, ref } = req.body;
@@ -88,6 +130,38 @@ router.post('/register', validate.register, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Login with email and password
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string }
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string, description: JWT access token }
+ *                 user: { $ref: '#/components/schemas/User' }
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/auth/login
 router.post('/login', validate.login, async (req, res) => {
   const { email, password } = req.body;
@@ -109,6 +183,27 @@ router.post('/login', validate.login, async (req, res) => {
   res.json({ token: accessToken, user: { id: user.id, name: user.name, email: user.email, role: user.role, publicKey: user.stellar_public_key } });
 });
 
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Refresh access token using httpOnly refresh token cookie
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: New access token issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string }
+ *       401:
+ *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/auth/refresh
 router.post('/refresh', async (req, res) => {
   const rawToken = req.cookies?.refreshToken;
@@ -136,6 +231,22 @@ router.post('/refresh', async (req, res) => {
   res.json({ token: accessToken });
 });
 
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout and invalidate refresh token
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok: { type: boolean }
+ */
 // POST /api/auth/logout
 router.post('/logout', async (req, res) => {
   const rawToken = req.cookies?.refreshToken;

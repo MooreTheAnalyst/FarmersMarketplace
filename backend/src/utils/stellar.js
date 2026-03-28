@@ -116,6 +116,7 @@ async function getTransactions(publicKey) {
   }
 }
 
+module.exports = { isTestnet, server, createWallet, fundTestnetAccount, getBalance, sendPayment, getTransactions };
 async function createClaimableBalance({
   senderSecret,
   farmerPublicKey,

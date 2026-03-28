@@ -18,6 +18,7 @@ const {
 const { sendPushToUser } = require('../utils/pushNotifications');
 const { err } = require('../middleware/error');
 const { getCachedResponse, cacheResponse } = require('../utils/idempotency');
+const { resolveCoupon, calcDiscount } = require('./coupons');
 
 function parsePreorderUnlockUnix(preorderDeliveryDate) {
   const ms = Date.parse(`${preorderDeliveryDate}T00:00:00Z`);
@@ -42,12 +43,68 @@ const { sendOrderEmails, sendStatusUpdateEmail, sendLowStockAlert } = require('.
 const { err } = require('../middleware/error');
 const { getCachedResponse, cacheResponse } = require('../utils/idempotency');
 
+/**
+ * @swagger
+ * tags:
+ *   name: Orders
+ *   description: Order placement and management
+ */
+
+/**
+ * @swagger
+ * /api/orders:
+ *   post:
+ *     summary: Place and pay for an order (buyer only)
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: x-idempotency-key
+ *         schema: { type: string }
+ *         description: Optional idempotency key to prevent duplicate orders
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [product_id, quantity]
+ *             properties:
+ *               product_id: { type: integer }
+ *               quantity: { type: integer, minimum: 1 }
+ *               address_id: { type: integer, description: Optional delivery address ID }
+ *     responses:
+ *       200:
+ *         description: Order placed and payment successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 orderId: { type: integer }
+ *                 status: { type: string, example: paid }
+ *                 txHash: { type: string }
+ *                 totalPrice: { type: number }
+ *       402:
+ *         description: Insufficient balance or payment failed
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ *       403:
+ *         description: Only buyers can place orders
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // POST /api/orders
 router.post('/', auth, validate.order, async (req, res) => {
   if (req.user.role !== 'buyer') return err(res, 403, 'Only buyers can place orders', 'forbidden');
 
   const { product_id, address_id } = req.body;
   const useSorobanEscrow = Boolean(req.body.use_soroban_escrow);
+  const { product_id, address_id, coupon_code } = req.body;
   const quantity = parseInt(req.body.quantity, 10);
   if (!product_id || Number.isNaN(quantity) || quantity < 1) {
     return err(res, 400, 'product_id and a positive quantity are required', 'validation_error');
@@ -81,30 +138,19 @@ router.post('/', auth, validate.order, async (req, res) => {
   const buyer = db
     .prepare('SELECT id, name, email, stellar_public_key, stellar_secret_key, referred_by, referral_bonus_sent FROM users WHERE id = ?')
     .get(req.user.id);
-  const idempotencyKey = req.headers['x-idempotency-key'];
-  const cached = await getCachedResponse(idempotencyKey);
-  if (cached) return res.status(cached.success ? 200 : 402).json(cached);
 
-  if (address_id) {
-    const { rows } = await db.query('SELECT * FROM addresses WHERE id = $1 AND user_id = $2', [address_id, req.user.id]);
-    if (!rows[0]) return err(res, 400, 'Invalid address_id', 'validation_error');
+  const subtotal = product.price * quantity;
+  let discount = 0;
+  let appliedCoupon = null;
+
+  if (coupon_code) {
+    const { coupon, error, code: errCode } = resolveCoupon(coupon_code, product.farmer_id);
+    if (error) return err(res, 400, error, errCode);
+    discount = calcDiscount(coupon, subtotal);
+    appliedCoupon = coupon;
   }
 
-  const { rows: pRows } = await db.query(
-    `SELECT p.*, u.stellar_public_key as farmer_wallet FROM products p JOIN users u ON p.farmer_id = u.id WHERE p.id = $1`,
-    [product_id]
-  );
-  const product = pRows[0];
-  if (!product) return err(res, 404, 'Product not found', 'not_found');
-
-  const { rows: bRows } = await db.query(
-    'SELECT id, name, email, stellar_public_key, stellar_secret_key, referred_by, referral_bonus_sent FROM users WHERE id = $1',
-    [req.user.id]
-  );
-  const buyer = bRows[0];
-  const totalPrice = product.price * quantity;
-
-  const totalPrice = product.price * quantity;
+  const totalPrice = parseFloat((subtotal - discount).toFixed(7));
   const balance = await getBalance(buyer.stellar_public_key);
   const required = totalPrice + 0.00001;
   if (balance < required) {
@@ -263,10 +309,15 @@ router.post('/', auth, validate.order, async (req, res) => {
       txHash,
       totalPrice,
       sorobanEscrow: useSorobanEscrow,
+      discount: discount > 0 ? discount : undefined,
       preorder: !!product.is_preorder,
       preorderDeliveryDate: product.preorder_delivery_date || null,
       claimableBalanceId: balanceId,
     };
+
+    if (appliedCoupon) {
+      db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(appliedCoupon.id);
+    }
 
     if (idempotencyKey) cacheResponse(idempotencyKey, responseData);
     return res.json(responseData);
@@ -333,6 +384,38 @@ router.post('/', auth, validate.order, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/orders:
+ *   get:
+ *     summary: Get buyer's order history
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, paid, failed] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Paginated order list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/Order' }
+ */
 // GET /api/orders
 router.get('/', auth, async (req, res) => {
   const { status } = req.query;
@@ -386,6 +469,40 @@ router.get('/', auth, async (req, res) => {
   res.json({ success: true, data, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
+/**
+ * @swagger
+ * /api/orders/sales:
+ *   get:
+ *     summary: Get farmer's incoming sales
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Paginated sales list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: array
+ *                       items: { $ref: '#/components/schemas/Order' }
+ *       403:
+ *         description: Farmers only
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
 // GET /api/orders/sales - farmer's incoming orders
 router.get('/sales', auth, (req, res) => {
   if (req.user.role !== 'farmer') {

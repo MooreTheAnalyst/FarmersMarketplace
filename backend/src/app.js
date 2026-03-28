@@ -12,6 +12,8 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 const { enforceHttps, hsts } = require('./middleware/https');
 const { csrfProtect, csrfTokenHandler } = require('./middleware/csrf');
 const { errorHandler } = require('./middleware/error');
@@ -50,6 +52,10 @@ app.use('/uploads/videos', express.static(path.join(__dirname, '../uploads/video
 
 app.get('/api/csrf-token', csrfTokenHandler);
 
+// Interactive API documentation
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Apply CSRF protection to all state-changing routes (skip in test)
 if (process.env.NODE_ENV !== 'test') {
   app.use(csrfProtect);
 }

@@ -25,6 +25,19 @@ jest.mock('../src/db/schema', () => ({
 
 // --- Stellar mock ---
 jest.mock('../src/utils/stellar', () => ({
+  isTestnet:          true,
+  server: {
+    payments: jest.fn(() => ({
+      forAccount: jest.fn().mockReturnThis(),
+      cursor:     jest.fn().mockReturnThis(),
+      stream:     jest.fn(() => jest.fn()), // returns a stop function
+    })),
+  },
+  createWallet:       jest.fn(() => ({ publicKey: 'GPUBKEY', secretKey: 'SSECRET' })),
+  getBalance:         jest.fn().mockResolvedValue(1000),
+  getTransactions:    jest.fn().mockResolvedValue([]),
+  fundTestnetAccount: jest.fn().mockResolvedValue({}),
+  sendPayment:        jest.fn().mockResolvedValue('TXHASH123'),
   createWallet:           jest.fn(() => ({ publicKey: 'GPUBKEY', secretKey: 'SSECRET' })),
   getBalance:             jest.fn().mockResolvedValue(1000),
   getTransactions:        jest.fn().mockResolvedValue([]),

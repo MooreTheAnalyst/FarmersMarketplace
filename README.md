@@ -76,6 +76,8 @@ Runs on http://localhost:3000
 
 ## API Endpoints
 
+Interactive API documentation is available at **[http://localhost:4000/api/docs](http://localhost:4000/api/docs)** when the backend is running.
+
 | Method | Path                                     | Auth   | Description                                                        |
 | ------ | ---------------------------------------- | ------ | ------------------------------------------------------------------ |
 | POST   | /api/auth/register                       | —      | Register user                                                      |
