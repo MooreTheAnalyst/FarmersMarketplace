@@ -13,6 +13,7 @@ import ShareButtons from '../components/ShareButtons';
 import PriceHistoryChart from '../components/PriceHistoryChart';
 import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
+import QRCode from 'qrcode.react';
 
 const POLL_INTERVAL_MS = 3000;
 const TIMEOUT_MS = 60000;
@@ -105,6 +106,11 @@ export default function ProductDetail() {
   const [couponResult, setCouponResult] = useState(null); // { discount, final_total, discount_type, discount_value }
   const [couponError, setCouponError] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
+  const [walletPaymentOpen, setWalletPaymentOpen] = useState(false);
+  const [walletOrderId, setWalletOrderId] = useState(null);
+  const [paymentLink, setPaymentLink] = useState('');
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletStatus, setWalletStatus] = useState('pending');
 
   // Nutrition state
   const [nutritionExpanded, setNutritionExpanded] = useState(false);
@@ -321,6 +327,43 @@ export default function ProductDetail() {
       setError(getStellarErrorMessage(e) || getErrorMessage(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleWalletPay() {
+    if (!user) return navigate('/login');
+    setWalletLoading(true);
+    try {
+      const orderRes = await api.placeOrder({
+        product_id: product.id,
+        quantity: qty,
+        address_id: selectedAddressId || undefined,
+        coupon_code: couponResult ? couponCode.trim() : undefined,
+      });
+      const linkRes = await api.getOrderPaymentLink(orderRes.orderId);
+      setWalletOrderId(orderRes.orderId);
+      setPaymentLink(linkRes.paymentLink);
+      setWalletStatus('pending');
+      setWalletPaymentOpen(true);
+      // Poll status
+      const interval = setInterval(async () => {
+        try {
+          const ordersRes = await api.getOrders({ product_id: product.id });
+          const order = ordersRes.data.find(o => o.id === orderRes.orderId);
+          if (order && order.status === 'paid') {
+            setWalletStatus('paid');
+            clearInterval(interval);
+          } else if (order && order.status === 'failed') {
+            setWalletStatus('failed');
+            clearInterval(interval);
+          }
+        } catch {}
+      }, 5000);
+      setTimeout(() => clearInterval(interval), 5 * 60 * 1000); // 5 min
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setWalletLoading(false);
     }
   }
 
@@ -898,6 +941,12 @@ export default function ProductDetail() {
               {loading && <div className="spinner-sm" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />}
               {loading ? t('productDetail.processing') : `${useEscrow ? t('productDetail.payToEscrow') : t('productDetail.buyNow')} · ${sourceAsset && pathEstimate ? `~${pathEstimate.sourceAmount.toFixed(4)} ${pathEstimate.sourceCode}` : `${total} XLM`}`}
             </button>
+            
+            {user?.role === 'buyer' && (
+              <button style={{ ...s.btn, background: '#1e40af', marginBottom: 12 }} onClick={handleWalletPay} disabled={walletLoading || product.quantity === 0}>
+                {walletLoading ? '...' : `💳 Pay with Stellar Wallet · ${total} XLM`}
+              </button>
+            )}
             <style>{`@keyframes spin { to { transform: rotate(360deg); } } .spinner-sm { display: inline-block; }`}</style>
           </>
         )}

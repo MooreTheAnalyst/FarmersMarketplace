@@ -1055,4 +1055,5 @@ module.exports = {
   getContractEvents,
   resolveFederationAddress,
   mintRewardTokens,
+  generatePaymentLink,
 };

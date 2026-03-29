@@ -238,6 +238,7 @@ export const api = {
 
   placeOrderWithBudgetOverride: (body) => request('/orders', { method: 'POST', body: { ...body, budget_override_confirmed: true } }),
   // params may include: status, page, limit
+  getOrderPaymentLink: (id) => request(`/orders/${id}/payment-link`),
   getOrders:    (params = {})  => request(`/orders${toQs(params)}`),
   getSales:     (params = {})  => request(`/orders/sales${toQs(params)}`),
 
