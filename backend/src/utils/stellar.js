@@ -402,6 +402,150 @@ async function getContractState(contractId, prefix = null) {
   return entries;
 }
 
+/**
+ * Build an InvokeHostFunction tx and run Soroban RPC simulateTransaction only (never submits).
+ * @param {string} contractId Contract address (C… or 64-char hex)
+ * @param {string} method Soroban contract function name
+ * @param {Array<{ type: string, value: unknown }>} args Passed to nativeToScVal(value, { type })
+ * @returns {Promise<{ success: boolean, fee: string|null, result: unknown, error: string|null }>}
+ */
+async function simulateContractCall(contractId, method, args = []) {
+  const sourcePublic = (
+    process.env.SOROBAN_SIMULATION_SOURCE_PUBLIC_KEY ||
+    process.env.PLATFORM_WALLET_PUBLIC_KEY ||
+    ""
+  ).trim();
+
+  if (!sourcePublic) {
+    const e = new Error(
+      "Configure SOROBAN_SIMULATION_SOURCE_PUBLIC_KEY or PLATFORM_WALLET_PUBLIC_KEY (funded account on this network for sequence + simulation).",
+    );
+    e.code = "simulation_source_unconfigured";
+    throw e;
+  }
+
+  const sorobanRpcUrl =
+    process.env.SOROBAN_RPC_URL ||
+    (isTestnet
+      ? "https://soroban-testnet.stellar.org"
+      : "https://soroban.stellar.org");
+  const sorobanServer = new StellarSdk.SorobanRpc.Server(sorobanRpcUrl);
+  const SorobanApi = StellarSdk.rpc?.Api;
+  if (!SorobanApi?.isSimulationSuccess) {
+    const e = new Error(
+      "Stellar SDK is missing rpc.Api simulation helpers; upgrade @stellar/stellar-sdk.",
+    );
+    e.code = "sdk_incompatible";
+    throw e;
+  }
+
+  let account;
+  try {
+    account = await server.loadAccount(sourcePublic);
+  } catch (loadErr) {
+    if (loadErr.response?.status === 404) {
+      const e = new Error(
+        `Simulation source account not found on ${STELLAR_NETWORK}: ${sourcePublic}`,
+      );
+      e.code = "simulation_source_not_found";
+      throw e;
+    }
+    throw loadErr;
+  }
+
+  const scParams = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (
+      !a ||
+      typeof a !== "object" ||
+      typeof a.type !== "string" ||
+      !("value" in a)
+    ) {
+      const e = new Error(
+        `args[${i}] must be { "type": "<soroban type>", "value": <json> } for nativeToScVal`,
+      );
+      e.code = "invalid_arg";
+      throw e;
+    }
+    scParams.push(StellarSdk.nativeToScVal(a.value, { type: a.type }));
+  }
+
+  const contract = new StellarSdk.Contract(contractId);
+  const operation = contract.call(method, ...scParams);
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(operation)
+    .setTimeout(60)
+    .build();
+
+  let sim;
+  try {
+    sim = await sorobanServer.simulateTransaction(tx);
+  } catch (rpcErr) {
+    return {
+      success: false,
+      fee: null,
+      result: null,
+      error: rpcErr.message || "Soroban RPC simulateTransaction failed",
+    };
+  }
+
+  if (SorobanApi.isSimulationError(sim)) {
+    const msg =
+      typeof sim.error === "string"
+        ? sim.error
+        : JSON.stringify(sim.error ?? "Simulation error");
+    return { success: false, fee: null, result: null, error: msg };
+  }
+
+  if (!SorobanApi.isSimulationSuccess(sim)) {
+    return {
+      success: false,
+      fee: null,
+      result: null,
+      error: "Unexpected simulation response from RPC",
+    };
+  }
+
+  const baseFee = BigInt(StellarSdk.BASE_FEE);
+  const resourceFee = BigInt(sim.minResourceFee || "0");
+  const fee = (baseFee + resourceFee).toString();
+
+  let decoded = null;
+  if (sim.result?.retval) {
+    try {
+      decoded = StellarSdk.scValToNative(sim.result.retval);
+    } catch {
+      try {
+        decoded = sim.result.retval.toXDR("base64");
+      } catch {
+        decoded = null;
+      }
+    }
+  }
+
+  if (SorobanApi.isSimulationRestore(sim)) {
+    return {
+      success: true,
+      fee,
+      result: {
+        returnValue: decoded,
+        restoreRequired: true,
+        restoreMinResourceFee:
+          sim.restorePreamble?.minResourceFee != null
+            ? String(sim.restorePreamble.minResourceFee)
+            : null,
+      },
+      error: null,
+    };
+  }
+
+  return { success: true, fee, result: decoded, error: null };
+}
+
 async function invokeEscrowContract({
   action,
   senderSecret,
@@ -764,6 +908,7 @@ module.exports = {
   claimBalance,
   invokeEscrowContract,
   getContractState,
+  simulateContractCall,
   resolveFederationAddress,
   mintRewardTokens,
 };

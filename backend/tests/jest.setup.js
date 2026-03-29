@@ -47,6 +47,8 @@ jest.mock('../src/utils/stellar', () => ({
   createClaimableBalance: jest.fn().mockResolvedValue({ txHash: 'ESCROW_TX', balanceId: 'BALANCE_ID_001' }),
   createPreorderClaimableBalance: jest.fn().mockResolvedValue({ txHash: 'PREORDER_TX', balanceId: 'PREORDER_BALANCE_001' }),
   claimBalance:           jest.fn().mockResolvedValue('CLAIM_TX_001'),
+  getContractState:       jest.fn(),
+  simulateContractCall:   jest.fn(),
 }));
 
 // --- Mailer mock ---
@@ -76,6 +78,7 @@ beforeEach(() => {
   stellar.isTestnet = true;
   stellar.createClaimableBalance.mockResolvedValue({ txHash: 'ESCROW_TX', balanceId: 'BALANCE_ID_001' });
   stellar.claimBalance.mockResolvedValue('CLAIM_TX_001');
+  stellar.simulateContractCall = jest.fn();
 
   const mailer = jest.requireMock('../src/utils/mailer');
   mailer.sendOrderEmails.mockResolvedValue({});

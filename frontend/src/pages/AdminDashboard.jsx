@@ -41,6 +41,16 @@ export default function AdminDashboard() {
   const [contractLoading, setContractLoading] = useState(false);
   const [contractError, setContractError] = useState('');
 
+  const [simContractId, setSimContractId] = useState('');
+  const [simMethod, setSimMethod] = useState('');
+  const [simArgsJson, setSimArgsJson] = useState('[]');
+  const [simBusy, setSimBusy] = useState(false);
+  const [simFormError, setSimFormError] = useState('');
+  const [simOutcome, setSimOutcome] = useState(null);
+
+  const inputStyle = { padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 };
+  const monoInputStyle = { ...inputStyle, fontFamily: 'monospace' };
+
   async function loadStats() {
     try {
       const res = await api.adminGetStats();
@@ -110,6 +120,36 @@ export default function AdminDashboard() {
       setContractError(e.message);
     } finally {
       setContractLoading(false);
+    }
+  }
+
+  async function handleSimulate(e) {
+    e.preventDefault();
+    setSimFormError('');
+    setSimOutcome(null);
+    let args;
+    try {
+      args = JSON.parse(simArgsJson.trim() || '[]');
+    } catch {
+      setSimFormError('Arguments must be valid JSON (array of { type, value } objects).');
+      return;
+    }
+    if (!Array.isArray(args)) {
+      setSimFormError('Arguments must be a JSON array.');
+      return;
+    }
+    if (!simContractId.trim() || !simMethod.trim()) {
+      setSimFormError('Select a registered contract and enter a method name.');
+      return;
+    }
+    setSimBusy(true);
+    try {
+      const data = await api.simulateContractCall(simContractId.trim(), simMethod.trim(), args);
+      setSimOutcome(data);
+    } catch (err) {
+      setSimFormError(err.message);
+    } finally {
+      setSimBusy(false);
     }
   }
 
@@ -197,6 +237,142 @@ export default function AdminDashboard() {
             onClick={() => loadUsers(pagination.page + 1)}
           >Next →</button>
         </div>
+      </div>
+
+      {/* Contract registry + simulation (registered contracts only) */}
+      <div style={{ ...s.card, marginTop: 32 }}>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>📜 Registered Soroban contracts</h3>
+        {contractMsg && (
+          <div style={{
+            color: contractMsg.includes('registered') || contractMsg.includes('Deregister') ? '#2d6a4f' : '#c0392b',
+            fontSize: 14,
+            marginBottom: 12,
+          }}
+          >{contractMsg}</div>
+        )}
+        <form onSubmit={handleRegisterContract} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          <input style={{ ...monoInputStyle, flex: '2 1 200px' }} placeholder="Contract ID" value={contractForm.contract_id} onChange={e => setContractForm(f => ({ ...f, contract_id: e.target.value }))} required />
+          <input style={{ ...inputStyle, flex: '1 1 140px' }} placeholder="Display name" value={contractForm.name} onChange={e => setContractForm(f => ({ ...f, name: e.target.value }))} required />
+          <select style={{ ...inputStyle }} value={contractForm.type} onChange={e => setContractForm(f => ({ ...f, type: e.target.value }))}>
+            <option value="escrow">escrow</option>
+            <option value="token">token</option>
+            <option value="other">other</option>
+          </select>
+          <select style={{ ...inputStyle }} value={contractForm.network} onChange={e => setContractForm(f => ({ ...f, network: e.target.value }))}>
+            <option value="testnet">testnet</option>
+            <option value="mainnet">mainnet</option>
+          </select>
+          <button type="submit" style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2d6a4f', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Register</button>
+        </form>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: '#666' }}>Filter:</span>
+          <select style={inputStyle} value={contractFilter.network} onChange={(e) => { const nf = { ...contractFilter, network: e.target.value }; setContractFilter(nf); loadContracts(nf); }}>
+            <option value="">All networks</option>
+            <option value="testnet">testnet</option>
+            <option value="mainnet">mainnet</option>
+          </select>
+          <select style={inputStyle} value={contractFilter.type} onChange={(e) => { const tf = { ...contractFilter, type: e.target.value }; setContractFilter(tf); loadContracts(tf); }}>
+            <option value="">All types</option>
+            <option value="escrow">escrow</option>
+            <option value="token">token</option>
+            <option value="other">other</option>
+          </select>
+        </div>
+        {contracts.length === 0 ? (
+          <div style={{ color: '#888', fontSize: 14 }}>No contracts registered. Add one above to enable simulation for this deployment.</div>
+        ) : (
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Name</th>
+                <th style={s.th}>Contract ID</th>
+                <th style={s.th}>Type</th>
+                <th style={s.th}>Network</th>
+                <th style={s.th}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contracts.map((c) => (
+                <tr key={c.id}>
+                  <td style={s.td}>{c.name}</td>
+                  <td style={{ ...s.td, fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all' }}>{c.contract_id}</td>
+                  <td style={s.td}>{c.type}</td>
+                  <td style={s.td}>{c.network}</td>
+                  <td style={s.td}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => { setSimContractId(c.contract_id); setSimFormError(''); setSimOutcome(null); }}
+                        style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #2d6a4f', background: '#f0fdf4', color: '#2d6a4f', fontSize: 12, cursor: 'pointer' }}
+                      >Simulate</button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeregisterContract(c.id)}
+                        style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                      >Deregister</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <h4 style={{ marginTop: 28, marginBottom: 12, color: '#444' }}>Simulate contract call</h4>
+        <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+          Runs Soroban <code style={{ fontSize: 12 }}>simulateTransaction</code> only (nothing is submitted). Each argument must be a JSON object with <code style={{ fontSize: 12 }}>type</code> and <code style={{ fontSize: 12 }}>value</code> for Stellar <code style={{ fontSize: 12 }}>nativeToScVal</code>.
+        </p>
+        <form onSubmit={handleSimulate} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <select
+            style={monoInputStyle}
+            value={simContractId}
+            onChange={(e) => setSimContractId(e.target.value)}
+          >
+            <option value="">— Select registered contract —</option>
+            {contracts.map((c) => (
+              <option key={c.id} value={c.contract_id}>{c.name} · {c.network}</option>
+            ))}
+          </select>
+          <input
+            style={inputStyle}
+            placeholder="Method name (e.g. balance, deposit)"
+            value={simMethod}
+            onChange={(e) => setSimMethod(e.target.value)}
+          />
+          <textarea
+            style={{ ...monoInputStyle, minHeight: 100, resize: 'vertical' }}
+            placeholder='[{"type":"u64","value":"1"}]'
+            value={simArgsJson}
+            onChange={(e) => setSimArgsJson(e.target.value)}
+          />
+          {simFormError && <div style={s.err}>{simFormError}</div>}
+          <button
+            type="submit"
+            disabled={simBusy || contracts.length === 0}
+            style={{
+              alignSelf: 'flex-start',
+              padding: '8px 20px',
+              borderRadius: 8,
+              border: 'none',
+              background: '#2d6a4f',
+              color: '#fff',
+              fontWeight: 600,
+              cursor: simBusy || contracts.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: contracts.length === 0 ? 0.5 : 1,
+            }}
+          >{simBusy ? 'Simulating…' : 'Run simulation'}</button>
+        </form>
+        {simOutcome && (
+          <div style={{ marginTop: 16, padding: 14, borderRadius: 8, background: simOutcome.success ? '#f0fdf4' : '#fff5f5', border: `1px solid ${simOutcome.success ? '#bbf7d0' : '#fecaca'}` }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: '#333' }}>Result</div>
+            <div style={{ fontSize: 13, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              <div><strong>success:</strong> {String(simOutcome.success)}</div>
+              {simOutcome.fee != null && <div><strong>fee (stroops):</strong> {simOutcome.fee}</div>}
+              {simOutcome.error != null && simOutcome.error !== '' && <div style={{ color: '#b91c1c' }}><strong>error:</strong> {simOutcome.error}</div>}
+              <div style={{ marginTop: 8 }}><strong>result:</strong> {JSON.stringify(simOutcome.result, null, 2)}</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Soroban Contract State Viewer */}
