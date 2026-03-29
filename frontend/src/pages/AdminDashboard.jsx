@@ -81,6 +81,12 @@ export default function AdminDashboard() {
             <div style={s.statVal}>{Number(stats.total_revenue_xlm).toFixed(2)}</div>
             <div style={s.statLabel}>Revenue (XLM)</div>
           </div>
+          {stats.fee_bump_enabled && (
+            <div style={s.stat}>
+              <div style={s.statVal}>{stats.fee_bump_count ?? 0}</div>
+              <div style={s.statLabel}>Fee Bumps Used</div>
+            </div>
+          )}
         </div>
       )}
 

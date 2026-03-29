@@ -36,7 +36,25 @@ router.get('/stats', async (_req, res) => {
   const { rows: p } = await db.query('SELECT COUNT(*) as count FROM products');
   const { rows: o } = await db.query('SELECT COUNT(*) as count FROM orders');
   const { rows: r } = await db.query(`SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE status = 'paid'`);
-  res.json({ success: true, data: { users: parseInt(u[0].count), products: parseInt(p[0].count), orders: parseInt(o[0].count), total_revenue_xlm: r[0].total } });
+
+  // Fee bump stats — count orders where fee_bumped flag is set
+  let feeBumpCount = 0;
+  try {
+    const { rows: fb } = await db.query(`SELECT COUNT(*) as count FROM orders WHERE fee_bumped = TRUE`);
+    feeBumpCount = parseInt(fb[0].count) || 0;
+  } catch { /* column may not exist yet */ }
+
+  res.json({
+    success: true,
+    data: {
+      users: parseInt(u[0].count),
+      products: parseInt(p[0].count),
+      orders: parseInt(o[0].count),
+      total_revenue_xlm: r[0].total,
+      fee_bump_count: feeBumpCount,
+      fee_bump_enabled: !!process.env.PLATFORM_FEE_ACCOUNT_SECRET,
+    },
+  });
 });
 
 // GET /api/admin/farmers/pending - Get farmers pending verification

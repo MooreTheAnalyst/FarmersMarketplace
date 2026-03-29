@@ -327,9 +327,8 @@ try {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (farmer_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
-  ];
-
-  for (const sql of migrations) {
+    `ALTER TABLE orders ADD COLUMN fee_bumped INTEGER DEFAULT 0`,
+  ];  for (const sql of migrations) {
     try { sqlite.exec(sql); } catch {}
   }
 

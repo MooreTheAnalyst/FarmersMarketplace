@@ -85,6 +85,25 @@ async function getBalance(publicKey) {
   }
 }
 
+/**
+ * Wrap an inner transaction with a FeeBumpTransaction so the platform account
+ * pays the network fee instead of the buyer.
+ * Returns the fee-bumped transaction (signed by the fee account).
+ */
+async function wrapWithFeeBump(innerTx, feeAccountSecret) {
+  const feeKeypair = StellarSdk.Keypair.fromSecret(feeAccountSecret);
+  const feeBumpTx = StellarSdk.TransactionBuilder.buildFeeBumpTransaction(
+    feeKeypair,
+    StellarSdk.BASE_FEE * 10, // fee bump pays 10x base fee
+    innerTx,
+    networkPassphrase,
+  );
+  feeBumpTx.sign(feeKeypair);
+  return feeBumpTx;
+}
+
+const FEE_BUMP_THRESHOLD_XLM = parseFloat(process.env.FEE_BUMP_THRESHOLD_XLM || '2');
+
 async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
   const senderKeypair = StellarSdk.Keypair.fromSecret(senderSecret);
   
@@ -92,7 +111,6 @@ async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
   try {
     senderAccount = await server.loadAccount(senderKeypair.publicKey());
   } catch (error) {
-    // Check if account is not found (unfunded)
     if (error.response && error.response.status === 404) {
       const err = new Error('Stellar account not found. Please fund your wallet to activate it.');
       err.code = 'account_not_found';
@@ -125,7 +143,6 @@ async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
     .addMemo(StellarSdk.Memo.text(memo || "FarmersMarket"))
     .setTimeout(30);
 
-  // Add platform fee operation atomically if configured
   if (feeAmount > 0 && platformWallet) {
     txBuilder.addOperation(
       StellarSdk.Operation.payment({
@@ -138,7 +155,24 @@ async function sendPayment({ senderSecret, receiverPublicKey, amount, memo }) {
 
   const transaction = txBuilder.build();
   transaction.sign(senderKeypair);
-  const result = await server.submitTransaction(transaction);
+
+  // Check if buyer balance is below threshold — wrap with fee bump if so
+  const feeAccountSecret = process.env.PLATFORM_FEE_ACCOUNT_SECRET;
+  const buyerBalance = await getBalance(senderKeypair.publicKey());
+  const usedFeeBump = feeAccountSecret && buyerBalance < FEE_BUMP_THRESHOLD_XLM;
+
+  let txToSubmit = transaction;
+  if (usedFeeBump) {
+    console.log(`[FeeBump] Buyer balance ${buyerBalance} XLM < threshold ${FEE_BUMP_THRESHOLD_XLM} XLM — wrapping with fee bump`);
+    txToSubmit = await wrapWithFeeBump(transaction, feeAccountSecret);
+  }
+
+  const result = await server.submitTransaction(txToSubmit);
+
+  if (usedFeeBump) {
+    console.log(`[FeeBump] Fee bump used for tx ${result.hash} — buyer: ${senderKeypair.publicKey()}`);
+  }
+
   return result.hash;
 }
 
@@ -631,6 +665,7 @@ module.exports = {
   getBalance,
   getAllBalances,
   sendPayment,
+  wrapWithFeeBump,
   pathPayment,
   getPathPaymentEstimate,
   getPlatformFeeInfo,
