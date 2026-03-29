@@ -134,6 +134,14 @@ router.get('/', async (req, res) => {
   if (minPrice !== undefined) { const min = parseFloat(minPrice); if (!isNaN(min)) { conditions.push(`p.price >= $${params.length + 1}`); params.push(min); } }
   if (maxPrice !== undefined) { const max = parseFloat(maxPrice); if (!isNaN(max)) { conditions.push(`p.price <= $${params.length + 1}`); params.push(max); } }
   if (seller)     { conditions.push(`u.name ILIKE $${params.length + 1}`);         params.push(`%${seller}%`); }
+  if (req.query.grade) {
+    const VALID_GRADES = ['A', 'B', 'C', 'Ungraded'];
+    if (!VALID_GRADES.includes(req.query.grade)) {
+      return res.status(400).json({ success: false, error: 'grade must be A, B, C, or Ungraded', code: 'validation_error' });
+    }
+    conditions.push(`p.grade = $${params.length + 1}`);
+    params.push(req.query.grade);
+  }
 
   // Haversine distance filter (radius in km)
   const filterLat = parseFloat(lat);
@@ -673,6 +681,13 @@ router.patch('/:id', auth, async (req, res) => {
 
   if (updates.nutrition !== undefined) {
     updates.nutrition = updates.nutrition ? JSON.stringify(updates.nutrition) : null;
+  }
+
+  if (updates.grade !== undefined) {
+    const VALID_GRADES = ['A', 'B', 'C', 'Ungraded'];
+    if (!VALID_GRADES.includes(updates.grade)) {
+      return err(res, 400, 'grade must be A, B, C, or Ungraded', 'validation_error');
+    }
   }
 
   const nextIsPreorder = updates.is_preorder !== undefined

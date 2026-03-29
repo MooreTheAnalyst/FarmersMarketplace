@@ -336,6 +336,7 @@ try {
       deployed_by INTEGER REFERENCES users(id),
       deployed_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
+    `ALTER TABLE products ADD COLUMN grade TEXT DEFAULT 'Ungraded' CHECK(grade IN ('A','B','C','Ungraded'))`,
   ];
 
   for (const sql of migrations) {
