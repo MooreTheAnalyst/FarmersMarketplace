@@ -8,6 +8,8 @@ import { getErrorMessage } from '../utils/errorMessages';
 import { useXlmRate } from '../utils/useXlmRate';
 import StarRating from '../components/StarRating';
 import Spinner from '../components/Spinner';
+import ShareButtons from '../components/ShareButtons';
+import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
 
 const POLL_INTERVAL_MS = 3000;
@@ -111,6 +113,7 @@ export default function ProductDetail() {
   const [selectedWeek, setSelectedWeek] = useState(null); // YYYY-MM-DD of chosen week
   // Platform fee state
   const [feeInfo, setFeeInfo] = useState(null); // { feePercent, feeAmount, farmerAmount }
+  const [shareMeta, setShareMeta] = useState(null);
 
   const loadReviews = useCallback(async () => {
     try { const res = await api.getProductReviews(id); setReviews(res.data ?? []); }
@@ -119,6 +122,7 @@ export default function ProductDetail() {
 
   useEffect(() => {
     api.getProduct(id).then(res => setProduct(res.data ?? res)).catch(() => navigate('/marketplace'));
+    api.getProductShareMeta(id).then(res => setShareMeta(res.data ?? null)).catch(() => setShareMeta(null));
     loadReviews();
     api.getProductImages(id).then(res => {
       const imgs = res.data ?? [];
@@ -187,6 +191,11 @@ export default function ProductDetail() {
   }, [sourceAsset, qty, couponResult, product]);
 
   if (!product) return <Spinner />;
+
+  const shareUrl = shareMeta?.url || `${window.location.origin}/product/${id}`;
+  const shareTitle = shareMeta?.title || `${product.name} on Farmers Marketplace`;
+  const shareDescription = shareMeta?.description || product.description || 'Fresh produce from local farmers';
+  const shareImage = shareMeta?.image || product.image_url || '';
 
   // Get the best matching tier price for the current quantity
   const getTierPrice = (quantity) => {
@@ -358,6 +367,14 @@ export default function ProductDetail() {
 
   return (
     <div style={s.page}>
+      <Helmet>
+        <title>{shareTitle}</title>
+        <meta property="og:title" content={shareTitle} />
+        <meta property="og:description" content={shareDescription} />
+        <meta property="og:url" content={shareUrl} />
+        <meta property="og:type" content="product" />
+        {shareImage ? <meta property="og:image" content={shareImage} /> : null}
+      </Helmet>
       <div style={s.card}>
         {product.video_url ? (
           <video
@@ -421,6 +438,14 @@ export default function ProductDetail() {
         <div style={s.desc}>
           {product.description || "Fresh from the farm."}
         </div>
+
+        <ShareButtons
+          title={shareTitle}
+          url={shareUrl}
+          onShare={(platform) => {
+            api.trackShareEvent(product.id, platform).catch(() => {});
+          }}
+        />
 
         {product.nutrition && (
           <div style={{ marginBottom: 16 }}>

@@ -394,6 +394,8 @@ export const api = {
 
   getXlmRate: () => request('/rates/xlm-usd'),
   getAnalytics: () => request('/analytics/farmer'),
+  getProductShareMeta: (id) => request(`/products/${id}/share`),
+  trackShareEvent: (id, platform) => request(`/products/${id}/share`, { method: 'POST', body: { platform } }),
 
   // Admin
   adminGetUsers: (page = 1) => request(`/admin/users?page=${page}`),
