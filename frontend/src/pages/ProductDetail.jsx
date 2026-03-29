@@ -536,6 +536,28 @@ export default function ProductDetail() {
             Pre-Order{product.preorder_delivery_date ? ` · Expected delivery ${product.preorder_delivery_date}` : ''}
           </div>
         ) : null}
+
+        {/* Allergen badges */}
+        {(() => {
+          let allergens = [];
+          try { allergens = product.allergens ? JSON.parse(product.allergens) : []; } catch {}
+          return (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Allergens</div>
+              {allergens.length === 0 ? (
+                <span style={{ fontSize: 12, color: '#888', background: '#f5f5f5', borderRadius: 4, padding: '3px 8px' }}>No known allergens</span>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {allergens.map(a => (
+                    <span key={a} style={{ fontSize: 12, fontWeight: 600, background: '#fff3cd', color: '#856404', border: '1px solid #f0c040', borderRadius: 4, padding: '3px 8px' }}>
+                      ⚠️ {a.charAt(0).toUpperCase() + a.slice(1)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div style={s.price}>
           {unitPrice} XLM{" "}
           <span style={{ fontSize: 14, fontWeight: 400 }}>

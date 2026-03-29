@@ -29,6 +29,7 @@ const EMPTY_FORM = {
   category: 'other',
   is_preorder: false,
   preorder_delivery_date: '',
+  allergens: [],
   nutrition: {
     calories: '',
     protein: '',
@@ -448,6 +449,7 @@ export default function Dashboard() {
         pricing_type: form.pricing_type || 'unit',
         min_weight: form.pricing_type === 'weight' ? parseFloat(form.min_weight) : undefined,
         max_weight: form.pricing_type === 'weight' ? parseFloat(form.max_weight) : undefined,
+        allergens: form.allergens && form.allergens.length > 0 ? form.allergens : undefined,
       });
       setMsg({ type: 'ok', text: t('dashboard.productListedOk') });
       setForm(EMPTY_FORM);
@@ -576,6 +578,39 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+
+            {/* Allergen selector */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={s.label}>Allergens <span style={{ color: '#aaa', fontWeight: 400 }}>(select all that apply)</span></label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {['gluten', 'nuts', 'dairy', 'eggs', 'soy', 'shellfish'].map(a => {
+                  const selected = (form.allergens || []).includes(a);
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      style={{
+                        padding: '5px 10px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
+                        border: selected ? '1px solid #c0392b' : '1px solid #ddd',
+                        background: selected ? '#fee' : '#fff',
+                        color: selected ? '#c0392b' : '#555',
+                        fontWeight: selected ? 700 : 400,
+                      }}
+                      onClick={() => setForm(f => ({
+                        ...f,
+                        allergens: selected
+                          ? (f.allergens || []).filter(x => x !== a)
+                          : [...(f.allergens || []), a],
+                      }))}
+                      aria-pressed={selected}
+                    >
+                      {selected ? '✕ ' : ''}{a.charAt(0).toUpperCase() + a.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <button style={s.btn} type="submit">List Product</button>
 
             <details style={{ marginTop: 16 }}>

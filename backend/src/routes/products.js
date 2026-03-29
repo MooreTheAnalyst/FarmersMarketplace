@@ -8,6 +8,16 @@ const { sanitizeText } = require('../utils/sanitize');
 const { sendBackInStockEmail } = require('../utils/mailer');
 const AutomaticOrderProcessor = require('../services/AutomaticOrderProcessor');
 
+const VALID_ALLERGENS = ['gluten', 'nuts', 'dairy', 'eggs', 'soy', 'shellfish'];
+
+function parseAndValidateAllergens(value) {
+  if (value === undefined || value === null) return { allergens: null };
+  const arr = Array.isArray(value) ? value : [];
+  const invalid = arr.find(a => !VALID_ALLERGENS.includes(a));
+  if (invalid) return { error: `Invalid allergen: "${invalid}". Must be one of: ${VALID_ALLERGENS.join(', ')}` };
+  return { allergens: arr.length > 0 ? JSON.stringify(arr) : null };
+}
+
 function normalizePreorderInput(body) {
   const isPreorder =
     body.is_preorder === true || body.is_preorder === 1 || body.is_preorder === '1';
@@ -553,6 +563,9 @@ router.post('/', auth, validate.product, (req, res) => {
   const preorder = normalizePreorderInput(req.body);
   if (preorder.error) return err(res, 400, preorder.error, 'validation_error');
 
+  const allergenResult = parseAndValidateAllergens(req.body.allergens);
+  if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+
   const safeName = sanitizeText(name);
   const safeDescription = sanitizeText(description || '');
   const safeUnit = sanitizeText(unit || 'unit');
@@ -564,7 +577,7 @@ router.post('/', auth, validate.product, (req, res) => {
       : null;
 
   const result = db.prepare(
-    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, is_preorder, preorder_delivery_date, low_stock_threshold, nutrition) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, is_preorder, preorder_delivery_date, low_stock_threshold, nutrition, allergens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     req.user.id,
     safeName,
@@ -578,6 +591,7 @@ router.post('/', auth, validate.product, (req, res) => {
     preorder.preorderDeliveryDate,
     parseInt(req.body.low_stock_threshold, 10) || 5,
     nutrition ? JSON.stringify(nutrition) : null,
+    allergenResult.allergens,
   );
 
   res.json({ success: true, id: result.lastInsertRowid, message: 'Product listed' });
@@ -601,6 +615,7 @@ router.patch('/:id', auth, (req, res) => {
     'is_preorder',
     'preorder_delivery_date',
     'nutrition',
+    'allergens',
   ];
 
 // POST /api/products
@@ -615,6 +630,9 @@ router.post('/', auth, validate.product, async (req, res) => {
   if (isNaN(price) || price <= 0) return err(res, 400, 'Price must be a positive number', 'validation_error');
   if (isNaN(quantity) || quantity < 1) return err(res, 400, 'Quantity must be a positive integer', 'validation_error');
 
+  const allergenResult = parseAndValidateAllergens(req.body.allergens);
+  if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+
   const safeName        = sanitizeText(name);
   const safeDescription = sanitizeText(description || '');
   const safeUnit        = sanitizeText(unit || 'unit');
@@ -626,8 +644,8 @@ router.post('/', auth, validate.product, async (req, res) => {
   const maxWeight   = pricingType === 'weight' ? parseFloat(req.body.max_weight) : null;
 
   const { rows } = await db.query(
-    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, pricing_type, min_weight, max_weight) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id',
-    [req.user.id, safeName, safeDescription, safeCategory, price, quantity, safeUnit, safeImageUrl, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, pricingType, minWeight, maxWeight]
+    'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, pricing_type, min_weight, max_weight, allergens) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id',
+    [req.user.id, safeName, safeDescription, safeCategory, price, quantity, safeUnit, safeImageUrl, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, pricingType, minWeight, maxWeight, allergenResult.allergens]
   );
   res.json({ success: true, id: rows[0].id, message: 'Product listed' });
 });
@@ -641,7 +659,7 @@ router.patch('/:id', auth, async (req, res) => {
   if (!product) return err(res, 404, 'Not found or not yours', 'not_found');
 
   const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'carbon_kg_per_unit'];
-  const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'nutrition', 'pricing_type', 'min_weight', 'max_weight'];
+  const allowed = ['name', 'description', 'price', 'quantity', 'unit', 'category', 'low_stock_threshold', 'nutrition', 'pricing_type', 'min_weight', 'max_weight', 'allergens'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -681,6 +699,12 @@ router.patch('/:id', auth, async (req, res) => {
 
   if (updates.nutrition !== undefined) {
     updates.nutrition = updates.nutrition ? JSON.stringify(updates.nutrition) : null;
+  }
+
+  if (updates.allergens !== undefined) {
+    const allergenResult = parseAndValidateAllergens(updates.allergens);
+    if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+    updates.allergens = allergenResult.allergens;
   }
 
   if (updates.grade !== undefined) {
@@ -724,6 +748,12 @@ router.patch('/:id', auth, async (req, res) => {
 
   if (updates.nutrition !== undefined) {
     updates.nutrition = updates.nutrition ? JSON.stringify(updates.nutrition) : null;
+  }
+
+  if (updates.allergens !== undefined) {
+    const allergenResult = parseAndValidateAllergens(updates.allergens);
+    if (allergenResult.error) return err(res, 400, allergenResult.error, 'validation_error');
+    updates.allergens = allergenResult.allergens;
   }
 
   const keys   = Object.keys(updates);
