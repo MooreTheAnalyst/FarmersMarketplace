@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
+const cache = require('../cache');
 const validate = require('../middleware/validate');
 const upload = require('../middleware/upload');
 const { err } = require('../middleware/error');
@@ -78,7 +79,10 @@ function normalizePreorderInput(body) {
  *                       items: { $ref: '#/components/schemas/Product' }
  */
 // GET /api/products - public browse with optional filters
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
+  const cacheKey = `products:${JSON.stringify(req.query)}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
   const offset = (page - 1) * limit;
@@ -121,7 +125,6 @@ router.get('/', (req, res) => {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
 router.get('/', async (req, res) => {
-  const page   = Math.max(1, parseInt(req.query.page) || 1);
   const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
   const offset = (page - 1) * limit;
   const { category, minPrice, maxPrice, seller, available = 'true', lat, lng, radius } = req.query;
@@ -178,14 +181,9 @@ router.get('/', async (req, res) => {
     dataParams
   );
 
-  res.json({
-    success: true,
-    data: products,
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
-  });
+  const payload = { success: true, data: products, total, page, limit, totalPages: Math.ceil(total / limit) };
+  await cache.set(cacheKey, payload, 60);
+  res.json(payload);
 });
 
 // GET /api/products/search?q=tomato - FTS5 full-text search
@@ -629,6 +627,7 @@ router.post('/', auth, validate.product, async (req, res) => {
     'INSERT INTO products (farmer_id, name, description, category, price, quantity, unit, image_url, low_stock_threshold, nutrition, pricing_type, min_weight, max_weight) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id',
     [req.user.id, safeName, safeDescription, safeCategory, price, quantity, safeUnit, safeImageUrl, parseInt(req.body.low_stock_threshold) || 5, nutrition ? JSON.stringify(nutrition) : null, pricingType, minWeight, maxWeight]
   );
+  await cache.del('products:{}');
   res.json({ success: true, id: rows[0].id, message: 'Product listed' });
 });
 
@@ -773,6 +772,7 @@ router.delete('/:id', auth, async (req, res) => {
   const { rows } = await db.query('SELECT * FROM products WHERE id = $1 AND farmer_id = $2', [req.params.id, req.user.id]);
   if (!rows[0]) return err(res, 404, 'Not found or not yours', 'not_found');
   await db.query('DELETE FROM products WHERE id = $1', [req.params.id]);
+  await cache.del('products:{}');
   res.json({ success: true, message: 'Deleted' });
 });
 

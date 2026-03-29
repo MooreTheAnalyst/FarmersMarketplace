@@ -1,3 +1,4 @@
+require('./config'); // validate env vars before anything else
 const app = require('./app');
 const { startSubscriptionJob } = require('./jobs/processSubscriptions');
 const PORT = process.env.PORT || 4000;

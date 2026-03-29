@@ -1,7 +1,8 @@
-const router = require("express").Router();
-const StellarSdk = require("@stellar/stellar-sdk");
-const db = require("../db/schema");
-const auth = require("../middleware/auth");
+const router = require('express').Router();
+const StellarSdk = require('@stellar/stellar-sdk');
+const db = require('../db/schema');
+const auth = require('../middleware/auth');
+const cache = require('../cache');
 const validate = require("../middleware/validate");
 const {
   isTestnet,
@@ -66,6 +67,10 @@ const { err } = require('../middleware/error');
  */
 // GET /api/wallet
 router.get('/', auth, async (req, res) => {
+  const cacheKey = `wallet:${req.user.id}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   const { rows } = await db.query('SELECT stellar_public_key, referral_code FROM users WHERE id = $1', [req.user.id]);
   const user = rows[0];
   if (!user) return err(res, 404, "User not found", "user_not_found");
@@ -75,7 +80,7 @@ router.get('/', auth, async (req, res) => {
     getAllBalances(user.stellar_public_key),
   ]);
 
-  res.json({
+  const payload = {
     success: true,
     publicKey: user.stellar_public_key,
     balance,
@@ -83,7 +88,9 @@ router.get('/', auth, async (req, res) => {
     baseReserve: BASE_RESERVE_XLM,
     balances,
     referralCode: user.referral_code,
-  });
+  };
+  await cache.set(cacheKey, payload, 30);
+  res.json(payload);
 });
 
 router.get("/transactions", auth, async (req, res) => {
@@ -174,6 +181,16 @@ router.post("/send", auth, validate.sendXLM, async (req, res) => {
 router.post('/fund', auth, async (req, res) => {
   if (!stellar.isTestnet) return err(res, 400, 'Only available on testnet', 'testnet_only');
   const { rows } = await db.query('SELECT stellar_public_key FROM users WHERE id = $1', [req.user.id]);
+  if (!rows[0]) return err(res, 404, 'User not found', 'user_not_found');
+  try {
+    await fundTestnetAccount(rows[0].stellar_public_key);
+    await cache.del(`wallet:${req.user.id}`);
+    const balance = await getBalance(rows[0].stellar_public_key);
+    return res.json({ success: true, message: 'Account funded with 10,000 XLM (testnet)', balance });
+  } catch (e) {
+    return err(res, 500, e.message || 'Failed to fund account', 'fund_failed');
+  }
+});
   try {
     const txHash = await sendPayment({
       senderSecret: user.stellar_secret_key,
