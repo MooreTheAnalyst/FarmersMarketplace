@@ -205,6 +205,9 @@ export default function Wallet() {
   const [toasts, setToasts] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [budget, setBudget] = useState(null);
+  const [budgetInput, setBudgetInput] = useState('');
+  const [budgetMsg, setBudgetMsg] = useState(null);
 
   const [sendForm, setSendForm]   = useState({ destination: '', amount: '', memo: '' });
   const [sending, setSending]     = useState(false);
@@ -295,6 +298,14 @@ export default function Wallet() {
   useEffect(() => {
     unmounted.current = false;
     load();
+    if (user?.role === 'buyer' && typeof api.getBudget === 'function') {
+      api.getBudget()
+        .then((res) => {
+          setBudget(res);
+          setBudgetInput(res.budget != null ? String(res.budget) : '');
+        })
+        .catch(() => {});
+    }
     connectStream();
     return () => {
       unmounted.current = true;
@@ -316,6 +327,21 @@ export default function Wallet() {
       setFundMsg({ type: 'err', text: getStellarErrorMessage(e) || getErrorMessage(e) });
     } finally {
       setFunding(false);
+    }
+  }
+
+  async function handleSaveBudget(e) {
+    e.preventDefault();
+    if (typeof api.setBudget !== 'function') return;
+
+    setBudgetMsg(null);
+    try {
+      const value = budgetInput.trim() === '' ? null : parseFloat(budgetInput);
+      const res = await api.setBudget(value);
+      setBudget(res);
+      setBudgetMsg({ type: 'ok', text: 'Monthly budget updated' });
+    } catch (e) {
+      setBudgetMsg({ type: 'err', text: getErrorMessage(e) });
     }
   }
 
@@ -349,8 +375,8 @@ export default function Wallet() {
       return setSendMsg({ type: 'err', text: 'Memo must be 28 characters or fewer.' });
     setSending(true);
     try {
-      const res = await api.sendXLM({ destination: sendForm.destination.trim(), amount, memo: sendForm.memo.trim() || undefined });
-      setSendMsg({ type: 'ok', text: 'Sent ' + res.amount + ' XLM', txHash: res.txHash });
+      const res = await api.withdrawFunds(sendForm.destination.trim(), amount);
+      setSendMsg({ type: 'ok', text: 'Withdrew ' + res.amount + ' XLM', txHash: res.txHash });
       setSendForm({ destination: '', amount: '', memo: '' });
       load();
     } catch (e) {
@@ -421,6 +447,10 @@ export default function Wallet() {
           <div style={s.card}>
             <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>XLM Balance</div>
             <div style={s.balance}>{wallet ? wallet.balance.toFixed(2) : '-'} XLM</div>
+            <div style={{ fontSize: 13, color: '#555', marginTop: 6 }}>
+              Available to withdraw: {wallet ? (wallet.availableBalance ?? Math.max(0, wallet.balance - 1)).toFixed(2) : '-'} XLM
+            </div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>Includes 1.00 XLM base reserve</div>
             <div style={s.key}>{wallet?.publicKey}</div>
             <div style={{ fontSize: 12, color: '#888', marginTop: 10 }}>
               <span style={{ background: '#fff3cd', color: '#856404', border: '1px solid #ffc107', borderRadius: 4, padding: '1px 7px', fontWeight: 600, fontSize: 11 }}>TESTNET</span>
@@ -435,6 +465,59 @@ export default function Wallet() {
               </div>
             )}
           </div>
+
+          {user?.role === 'buyer' && (
+            <div style={s.card}>
+              <h3 style={{ marginBottom: 12, color: '#333' }}>Monthly Budget</h3>
+              <form onSubmit={handleSaveBudget}>
+                <label style={s.label}>Budget limit (XLM)</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    style={{ ...s.input, marginBottom: 0 }}
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="Optional"
+                    value={budgetInput}
+                    onChange={(e) => setBudgetInput(e.target.value)}
+                  />
+                  <button type="submit" style={{ ...s.btn, marginTop: 0, whiteSpace: 'nowrap' }}>Save</button>
+                </div>
+              </form>
+
+              {budget?.budget != null && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>
+                    Spent: {Number(budget.spentThisMonth || 0).toFixed(2)} / {Number(budget.budget).toFixed(2)} XLM
+                  </div>
+                  <div style={{ height: 12, background: '#edf2f7', borderRadius: 999, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.min(100, Number(budget.percentUsed || 0))}%`,
+                        height: '100%',
+                        background: Number(budget.percentUsed || 0) >= 80 ? '#c0392b' : '#2d6a4f',
+                        transition: 'width 200ms ease',
+                      }}
+                    />
+                  </div>
+                  <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>
+                    Remaining: {Number(budget.remaining || 0).toFixed(2)} XLM
+                  </div>
+                  {Number(budget.percentUsed || 0) >= 80 && (
+                    <div style={{ ...s.msg, background: '#fff3cd', color: '#856404', marginTop: 10 }}>
+                      Warning: you have used {Number(budget.percentUsed || 0).toFixed(0)}% of your monthly budget.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {budgetMsg && (
+                <div style={{ ...s.msg, background: budgetMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: budgetMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>
+                  {budgetMsg.text}
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={s.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -514,8 +597,8 @@ export default function Wallet() {
           </div>
 
           <div style={s.card}>
-            <h3 style={{ marginBottom: 4, color: '#333' }}>Send XLM</h3>
-            <p style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Transfer XLM to any external Stellar address.</p>
+            <h3 style={{ marginBottom: 4, color: '#333' }}>Withdraw XLM</h3>
+            <p style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Transfer XLM from your platform wallet to any Stellar public key.</p>
             <form onSubmit={handleSend} noValidate>
               <label style={s.label}>Destination Address</label>
               <input
@@ -536,7 +619,7 @@ export default function Wallet() {
                 onChange={e => setSendForm(f => ({ ...f, memo: e.target.value }))}
               />
               <button type="submit" style={s.btn} disabled={sending}>
-                {sending ? 'Sending...' : 'Send XLM'}
+                {sending ? 'Withdrawing...' : 'Withdraw XLM'}
               </button>
             </form>
             {sendMsg && (

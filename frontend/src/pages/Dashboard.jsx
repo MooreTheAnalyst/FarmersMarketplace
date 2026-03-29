@@ -54,6 +54,8 @@ export default function Dashboard() {
   const [videoUploadingByProduct, setVideoUploadingByProduct] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [flashSaleForm, setFlashSaleForm] = useState({ product_id: '', flash_sale_price: '', flash_sale_ends_at: '' });
+  const [flashSaleMsg, setFlashSaleMsg] = useState(null);
 
   // bundle state
   const [bundles, setBundles] = useState([]);
@@ -477,9 +479,67 @@ export default function Dashboard() {
     }
   }
 
+  async function handleSetFlashSale(e) {
+    e.preventDefault();
+    setFlashSaleMsg(null);
+    try {
+      const res = await api.setFlashSale(parseInt(flashSaleForm.product_id, 10), {
+        flash_sale_price: parseFloat(flashSaleForm.flash_sale_price),
+        flash_sale_ends_at: new Date(flashSaleForm.flash_sale_ends_at).toISOString(),
+      });
+      setFlashSaleMsg({ type: 'ok', text: `Flash sale set for product #${res.data.id}` });
+      await load();
+    } catch (e) {
+      setFlashSaleMsg({ type: 'err', text: getErrorMessage(e) });
+    }
+  }
+
+  async function handleCancelFlashSale(productId) {
+    try {
+      await api.cancelFlashSale(productId);
+      setFlashSaleMsg({ type: 'ok', text: `Flash sale canceled for product #${productId}` });
+      await load();
+    } catch (e) {
+      setFlashSaleMsg({ type: 'err', text: getErrorMessage(e) });
+    }
+  }
+
   return (
     <div style={s.page}>
       <div style={s.title}>🌾 Farmer Dashboard</div>
+      <div style={{ ...s.card, marginBottom: 24 }}>
+        <h3 style={{ marginBottom: 12, color: '#333' }}>Flash Sales</h3>
+        {flashSaleMsg && <div style={{ ...s.msg, background: flashSaleMsg.type === 'ok' ? '#d8f3dc' : '#fee', color: flashSaleMsg.type === 'ok' ? '#2d6a4f' : '#c0392b' }}>{flashSaleMsg.text}</div>}
+        <form onSubmit={handleSetFlashSale} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
+          <div>
+            <label style={s.label}>Product</label>
+            <select style={s.input} value={flashSaleForm.product_id} onChange={(e) => setFlashSaleForm((f) => ({ ...f, product_id: e.target.value }))} required>
+              <option value="">Select product</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={s.label}>Flash Price (XLM)</label>
+            <input style={s.input} type="number" min="0" step="any" required value={flashSaleForm.flash_sale_price} onChange={(e) => setFlashSaleForm((f) => ({ ...f, flash_sale_price: e.target.value }))} />
+          </div>
+          <div>
+            <label style={s.label}>Ends At</label>
+            <input style={s.input} type="datetime-local" required value={flashSaleForm.flash_sale_ends_at} onChange={(e) => setFlashSaleForm((f) => ({ ...f, flash_sale_ends_at: e.target.value }))} />
+          </div>
+          <button type="submit" style={s.btn}>Set Flash Sale</button>
+        </form>
+
+        <div style={{ marginTop: 14 }}>
+          {products.filter((p) => p.flash_sale_price && p.flash_sale_ends_at).map((p) => (
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #eee', paddingTop: 10, marginTop: 10 }}>
+              <div style={{ fontSize: 14 }}>
+                <strong>{p.name}</strong> - {p.flash_sale_price} XLM until {new Date(p.flash_sale_ends_at).toLocaleString()}
+              </div>
+              <button type="button" style={{ ...s.btn, background: '#c0392b' }} onClick={() => handleCancelFlashSale(p.id)}>Cancel</button>
+            </div>
+          ))}
+        </div>
+      </div>
       <div style={s.grid}>
         <div style={s.card}>
           <h3 style={{ marginBottom: 16, color: '#333' }}>Add New Product</h3>
