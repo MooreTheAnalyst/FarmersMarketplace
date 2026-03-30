@@ -353,6 +353,7 @@ router.use('/api/cooperatives', require('./cooperatives'));
 router.use('/api/analytics', require('./analytics'));
 router.use('/api/admin', require('./admin'));
 router.use('/api/farmers', require('./farmers'));
+router.use('/api/farmers', require('./bundleDiscounts'));
 router.use('/api/rates', require('./rates'));
 router.use('/api/favorites', require('./favorites'));
 router.use('/api/addresses', require('./addresses'));

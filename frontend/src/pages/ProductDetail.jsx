@@ -386,6 +386,11 @@ export default function ProductDetail() {
                   <p style={{ marginTop: 4, fontSize: 13, color: '#555' }}>Paid via path payment using <strong>{result.sourceAsset}</strong></p>
                 )}
                 <p style={{ marginTop: 4, fontSize: 12, wordBreak: 'break-all', color: '#555' }}>TX: {result.txHash}</p>
+                {result.bundleDiscount && (
+                  <p style={{ marginTop: 4, fontSize: 13, color: '#2d6a4f' }}>
+                    🏷️ Bundle discount applied: −{result.bundleDiscount.amount.toFixed(4)} XLM ({result.bundleDiscount.percent}% off for {result.bundleDiscount.minProducts}+ products)
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -795,6 +800,9 @@ export default function ProductDetail() {
               <div style={{ fontWeight: 600, color: '#2d6a4f' }}>Farmer receives: {feeInfo.farmerAmount.toFixed(7)} XLM</div>
             </div>
           )}
+          <div style={{ marginTop: 6, fontSize: 12, color: '#2d6a4f' }}>
+            🏷️ Bundle discount may apply if you order multiple products from this farmer
+          </div>
         </div>
 
         {/* Path payment asset selector */}

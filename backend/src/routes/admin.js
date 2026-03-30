@@ -290,6 +290,61 @@ router.patch('/farmers/:id/verify', async (req, res) => {
   res.json({ success: true, message: `Farmer ${status}` });
 });
 
+// GET /api/admin/contracts/:id/invocations?method=&from=&to=&page=
+router.get('/contracts/:id/invocations', async (req, res) => {
+  const registryId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(registryId)) {
+    return res.status(400).json({ success: false, error: 'Invalid contract registry id' });
+  }
+  const { rows: reg } = await db.query('SELECT contract_id FROM contracts_registry WHERE id = $1', [registryId]);
+  if (!reg[0]) return res.status(404).json({ success: false, error: 'Contract not found' });
+
+  const page  = Math.max(1, parseInt(req.query.page  || '1', 10));
+  const limit = 20;
+  const offset = (page - 1) * limit;
+
+  const conditions = ['contract_id = $1'];
+  const params = [reg[0].contract_id];
+
+  if (req.query.method) {
+    conditions.push(`method = $${params.length + 1}`);
+    params.push(req.query.method);
+  }
+  if (req.query.from) {
+    conditions.push(`invoked_at >= $${params.length + 1}`);
+    params.push(req.query.from);
+  }
+  if (req.query.to) {
+    conditions.push(`invoked_at <= $${params.length + 1}`);
+    params.push(req.query.to);
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
+  const { rows: countRows } = await db.query(
+    `SELECT COUNT(*) as count FROM contract_invocations ${where}`,
+    params,
+  );
+  const total = parseInt(countRows[0].count, 10);
+
+  const { rows } = await db.query(
+    `SELECT ci.id, ci.contract_id, ci.method, ci.args, ci.result, ci.tx_hash,
+            ci.success, ci.error, ci.invoked_at, u.name AS invoked_by_name
+     FROM contract_invocations ci
+     LEFT JOIN users u ON ci.invoked_by = u.id
+     ${where}
+     ORDER BY ci.invoked_at DESC
+     LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, limit, offset],
+  );
+
+  res.json({
+    success: true,
+    data: rows,
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+  });
+});
+
 // ── Contract ACL ──────────────────────────────────────────────────────────
 
 const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;

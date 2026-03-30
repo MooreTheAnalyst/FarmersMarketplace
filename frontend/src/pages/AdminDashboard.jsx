@@ -74,6 +74,14 @@ export default function AdminDashboard() {
   const [aclForm, setAclForm] = useState({ address: '', role: 'admin' });
   const [aclMsg, setAclMsg] = useState('');
 
+  // Contract invocation history
+  const [invocRegistryId, setInvocRegistryId] = useState('');
+  const [invocFilters, setInvocFilters] = useState({ method: '', from: '', to: '' });
+  const [invocPage, setInvocPage] = useState(1);
+  const [invocData, setInvocData] = useState(null);
+  const [invocLoading, setInvocLoading] = useState(false);
+  const [invocError, setInvocError] = useState('');
+
   async function loadStats() {
     try {
       const res = await api.adminGetStats();
@@ -227,6 +235,24 @@ export default function AdminDashboard() {
       setEvtError(e.message);
     } finally {
       setEvtLoading(false);
+    }
+  }
+
+  async function loadContractInvocations(e, page = 1) {
+    if (e) e.preventDefault();
+    if (!invocRegistryId) return;
+    setInvocLoading(true);
+    setInvocError('');
+    try {
+      const params = { ...invocFilters, page };
+      Object.keys(params).forEach((k) => { if (!params[k]) delete params[k]; });
+      const res = await api.adminGetContractInvocations(invocRegistryId, params);
+      setInvocData(res);
+      setInvocPage(page);
+    } catch (e) {
+      setInvocError(e.message);
+    } finally {
+      setInvocLoading(false);
     }
   }
 
@@ -808,6 +834,95 @@ export default function AdminDashboard() {
               </table>
             )}
           </>
+        )}
+      </div>
+
+      {/* Contract Invocation History */}
+      <div style={{ ...s.card, marginTop: 32 }}>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>📑 Contract Invocation History</h3>
+        <form onSubmit={(e) => loadContractInvocations(e, 1)} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          <select
+            style={{ ...s.input, flex: '2 1 200px' }}
+            value={invocRegistryId}
+            onChange={(e) => { setInvocRegistryId(e.target.value); setInvocData(null); }}
+            required
+          >
+            <option value="">— Select contract —</option>
+            {contracts.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} · {c.network}</option>
+            ))}
+          </select>
+          <input
+            style={{ ...s.input, flex: '1 1 120px' }}
+            placeholder="Method filter"
+            value={invocFilters.method}
+            onChange={(e) => setInvocFilters((f) => ({ ...f, method: e.target.value }))}
+          />
+          <input
+            type="datetime-local"
+            style={{ ...s.input, flex: '1 1 160px' }}
+            value={invocFilters.from}
+            onChange={(e) => setInvocFilters((f) => ({ ...f, from: e.target.value }))}
+          />
+          <input
+            type="datetime-local"
+            style={{ ...s.input, flex: '1 1 160px' }}
+            value={invocFilters.to}
+            onChange={(e) => setInvocFilters((f) => ({ ...f, to: e.target.value }))}
+          />
+          <button type="submit" disabled={invocLoading || !invocRegistryId} style={s.btn(invocLoading)}>
+            {invocLoading ? 'Loading…' : 'Fetch'}
+          </button>
+        </form>
+        {invocError && <div style={s.err}>{invocError}</div>}
+        {invocData && (
+          invocData.data.length === 0
+            ? <div style={{ color: '#888', fontSize: 14 }}>No invocations found.</div>
+            : <>
+              <table style={s.table}>
+                <thead>
+                  <tr>
+                    <th style={s.th}>When</th>
+                    <th style={s.th}>Method</th>
+                    <th style={s.th}>Status</th>
+                    <th style={s.th}>TX Hash</th>
+                    <th style={s.th}>Invoked by</th>
+                    <th style={s.th}>Result / Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invocData.data.map((inv) => (
+                    <tr key={inv.id}>
+                      <td style={{ ...s.td, fontSize: 12 }}>{new Date(inv.invoked_at).toLocaleString()}</td>
+                      <td style={{ ...s.td, fontFamily: 'monospace', fontSize: 12 }}>{inv.method}</td>
+                      <td style={s.td}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+                          background: inv.success ? '#d8f3dc' : '#fee',
+                          color: inv.success ? '#2d6a4f' : '#c0392b',
+                        }}>
+                          {inv.success ? 'success' : 'failed'}
+                        </span>
+                      </td>
+                      <td style={{ ...s.td, fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', maxWidth: 160 }}>
+                        {inv.tx_hash || '—'}
+                      </td>
+                      <td style={{ ...s.td, fontSize: 12 }}>{inv.invoked_by_name || `#${inv.invoked_by || '?'}`}</td>
+                      <td style={{ ...s.td, fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', maxWidth: 200, color: inv.success ? '#333' : '#c0392b' }}>
+                        {inv.success ? (inv.result ? JSON.stringify(JSON.parse(inv.result)) : '—') : (inv.error || '—')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={s.pagination}>
+                <button style={s.pgBtn(invocPage <= 1)} disabled={invocPage <= 1} onClick={() => loadContractInvocations(null, invocPage - 1)}>← Prev</button>
+                <span style={{ fontSize: 13, color: '#666' }}>
+                  Page {invocData.pagination.page} of {invocData.pagination.pages} ({invocData.pagination.total} total)
+                </span>
+                <button style={s.pgBtn(invocPage >= invocData.pagination.pages)} disabled={invocPage >= invocData.pagination.pages} onClick={() => loadContractInvocations(null, invocPage + 1)}>Next →</button>
+              </div>
+            </>
         )}
       </div>
     </div>

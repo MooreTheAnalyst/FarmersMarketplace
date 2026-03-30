@@ -232,6 +232,12 @@ export const api = {
   adminGetContractAcl: (registryId) => request(`/admin/contracts/${registryId}/acl`),
   adminGrantContractAcl: (registryId, body) => request(`/admin/contracts/${registryId}/acl`, { method: 'POST', body }),
   adminRevokeContractAcl: (registryId, address) => request(`/admin/contracts/${registryId}/acl/${encodeURIComponent(address)}`, { method: 'DELETE' }),
+  adminGetContractInvocations: (registryId, params = {}) => request(`/admin/contracts/${registryId}/invocations${toQs(params)}`),
+
+  getBundleDiscounts: () => request('/farmers/me/bundle-discounts'),
+  createBundleDiscount: (body) => request('/farmers/me/bundle-discounts', { method: 'POST', body }),
+  updateBundleDiscount: (id, body) => request(`/farmers/me/bundle-discounts/${id}`, { method: 'PUT', body }),
+  deleteBundleDiscount: (id) => request(`/farmers/me/bundle-discounts/${id}`, { method: 'DELETE' }),
 
   getAddresses: () => request('/addresses'),
 

@@ -205,7 +205,34 @@ router.post('/', auth, validate.order, async (req, res) => {
     }
   }
 
-  const totalPrice = parseFloat((subtotal - discount).toFixed(7));
+  // Bundle discount: count distinct products this buyer is ordering from the same farmer
+  let bundleDiscount = 0;
+  let appliedBundleDiscount = null;
+  try {
+    const { rows: pendingItems } = await db.query(
+      `SELECT COUNT(DISTINCT product_id) as cnt FROM orders
+       WHERE buyer_id = $1 AND status = 'pending'
+         AND product_id IN (SELECT id FROM products WHERE farmer_id = $2)`,
+      [req.user.id, product.farmer_id],
+    );
+    // +1 for the current product being ordered
+    const distinctProducts = parseInt(pendingItems[0]?.cnt || 0, 10) + 1;
+    if (distinctProducts >= 2) {
+      const { rows: tiers } = await db.query(
+        `SELECT * FROM bundle_discounts WHERE farmer_id = $1 AND min_products <= $2
+         ORDER BY min_products DESC LIMIT 1`,
+        [product.farmer_id, distinctProducts],
+      );
+      if (tiers[0]) {
+        appliedBundleDiscount = tiers[0];
+        bundleDiscount = parseFloat(((subtotal - discount) * tiers[0].discount_percent / 100).toFixed(7));
+      }
+    }
+  } catch {
+    // bundle_discounts table may not exist yet — skip silently
+  }
+
+  const totalPrice = parseFloat((subtotal - discount - bundleDiscount).toFixed(7));
 
   // 3. Balance Check
   const usePathPayment = source_asset && source_asset.code && source_asset.code !== 'XLM';
@@ -394,6 +421,7 @@ router.post('/', auth, validate.order, async (req, res) => {
       totalPrice,
       sorobanEscrow: useSorobanEscrow,
       discount: discount > 0 ? discount : undefined,
+      bundleDiscount: bundleDiscount > 0 ? { amount: bundleDiscount, percent: appliedBundleDiscount.discount_percent, minProducts: appliedBundleDiscount.min_products } : undefined,
       fee: feeInfo.feeAmount > 0 ? { percent: feeInfo.feePercent, amount: feeInfo.feeAmount, farmerAmount: feeInfo.farmerAmount } : undefined,
       preorder: !!product.is_preorder,
       preorderDeliveryDate: product.preorder_delivery_date || null,
