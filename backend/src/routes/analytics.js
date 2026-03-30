@@ -127,4 +127,84 @@ router.get('/farmer/forecast', auth, async (req, res) => {
   res.json({ success: true, data: forecast });
 });
 
+// GET /api/analytics/farmer/demand-heatmap - Geographic demand heatmap
+router.get('/farmer/demand-heatmap', auth, async (req, res) => {
+  if (req.user.role !== 'farmer') return err(res, 403, 'Farmers only', 'forbidden');
+
+  const farmerId = req.user.id;
+  const { from, to } = req.query;
+
+  // Build date filter
+  let dateFilter = '';
+  const params = [farmerId];
+  if (from) {
+    dateFilter += ` AND o.created_at >= $${params.length + 1}`;
+    params.push(from);
+  }
+  if (to) {
+    dateFilter += ` AND o.created_at <= $${params.length + 1}`;
+    params.push(to);
+  }
+
+  // Aggregate orders by buyer city/region
+  const query = `
+    SELECT 
+      COALESCE(a.city, 'Unknown') as city,
+      COALESCE(a.state, 'Unknown') as state,
+      COALESCE(a.country, 'Unknown') as country,
+      COALESCE(a.latitude, 0) as latitude,
+      COALESCE(a.longitude, 0) as longitude,
+      COUNT(*) as order_count,
+      COALESCE(SUM(o.total_price), 0) as total_revenue
+    FROM orders o
+    JOIN products p ON o.product_id = p.id
+    JOIN users buyer ON o.buyer_id = buyer.id
+    LEFT JOIN addresses a ON buyer.id = a.user_id AND a.is_default = true
+    WHERE p.farmer_id = $1 AND o.status = 'paid' ${dateFilter}
+    GROUP BY a.city, a.state, a.country, a.latitude, a.longitude
+    ORDER BY order_count DESC
+  `;
+
+  const { rows: regions } = await db.query(query, params);
+
+  // Build GeoJSON FeatureCollection
+  const features = regions
+    .filter(r => r.latitude !== 0 && r.longitude !== 0) // Only include entries with valid coordinates
+    .map(r => ({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [parseFloat(r.longitude), parseFloat(r.latitude)],
+      },
+      properties: {
+        city: r.city,
+        state: r.state,
+        country: r.country,
+        order_count: parseInt(r.order_count),
+        total_revenue: parseFloat(r.total_revenue),
+      },
+    }));
+
+  const geoJson = {
+    type: 'FeatureCollection',
+    features,
+  };
+
+  // Get top 5 regions
+  const topRegions = regions.slice(0, 5).map(r => ({
+    region: `${r.city}, ${r.state}, ${r.country}`,
+    orders: parseInt(r.order_count),
+    revenue: parseFloat(r.total_revenue),
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      geoJson,
+      topRegions,
+      totalRegions: regions.length,
+    },
+  });
+});
+
 module.exports = router;
