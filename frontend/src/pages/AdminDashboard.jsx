@@ -68,6 +68,12 @@ export default function AdminDashboard() {
   const [evtLoading, setEvtLoading] = useState(false);
   const [evtError, setEvtError] = useState('');
 
+  // Contract ACL
+  const [aclRegistryId, setAclRegistryId] = useState('');
+  const [aclEntries, setAclEntries] = useState([]);
+  const [aclForm, setAclForm] = useState({ address: '', role: 'admin' });
+  const [aclMsg, setAclMsg] = useState('');
+
   async function loadStats() {
     try {
       const res = await api.adminGetStats();
@@ -692,6 +698,116 @@ export default function AdminDashboard() {
                 >Next →</button>
               </div>
             </>
+        )}
+      </div>
+
+      {/* Contract ACL Management */}
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 8px #0001', marginBottom: 24 }}>
+        <h3 style={{ marginBottom: 16, color: '#333' }}>🔐 Contract Access Control (ACL)</h3>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end' }}>
+          <select
+            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }}
+            value={aclRegistryId}
+            onChange={async (e) => {
+              setAclRegistryId(e.target.value);
+              setAclEntries([]);
+              setAclMsg('');
+              if (e.target.value) {
+                try {
+                  const res = await api.adminGetContractAcl(e.target.value);
+                  setAclEntries(res.data ?? []);
+                } catch (err) { setAclMsg(err.message); }
+              }
+            }}
+          >
+            <option value="">— Select contract —</option>
+            {contracts.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} · {c.network}</option>
+            ))}
+          </select>
+        </div>
+
+        {aclRegistryId && (
+          <>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setAclMsg('');
+                try {
+                  await api.adminGrantContractAcl(aclRegistryId, aclForm);
+                  setAclForm({ address: '', role: 'admin' });
+                  const res = await api.adminGetContractAcl(aclRegistryId);
+                  setAclEntries(res.data ?? []);
+                  setAclMsg('Access granted.');
+                } catch (err) { setAclMsg(err.message); }
+              }}
+              style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16, alignItems: 'flex-end' }}
+            >
+              <input
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, flex: 1, minWidth: 300, fontFamily: 'monospace' }}
+                placeholder="Stellar address (G...)"
+                value={aclForm.address}
+                onChange={(e) => setAclForm((f) => ({ ...f, address: e.target.value.trim() }))}
+                required
+              />
+              <select
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }}
+                value={aclForm.role}
+                onChange={(e) => setAclForm((f) => ({ ...f, role: e.target.value }))}
+              >
+                <option value="admin">admin</option>
+                <option value="operator">operator</option>
+                <option value="viewer">viewer</option>
+              </select>
+              <button type="submit" style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#2d6a4f', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
+                Grant
+              </button>
+            </form>
+
+            {aclMsg && <div style={{ fontSize: 13, color: aclMsg.includes('granted') ? '#2d6a4f' : '#c0392b', marginBottom: 12 }}>{aclMsg}</div>}
+
+            {aclEntries.length === 0 ? (
+              <div style={{ color: '#888', fontSize: 14 }}>No ACL entries for this contract.</div>
+            ) : (
+              <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left' }}>
+                    <th style={{ padding: '6px 8px' }}>Address</th>
+                    <th style={{ padding: '6px 8px' }}>Role</th>
+                    <th style={{ padding: '6px 8px' }}>Granted by</th>
+                    <th style={{ padding: '6px 8px' }}>Granted at</th>
+                    <th style={{ padding: '6px 8px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aclEntries.map((entry) => (
+                    <tr key={entry.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: 12 }}>{entry.address}</td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <span style={{ background: '#d8f3dc', color: '#2d6a4f', borderRadius: 4, padding: '2px 8px', fontWeight: 600 }}>{entry.role}</span>
+                      </td>
+                      <td style={{ padding: '6px 8px', color: '#666' }}>{entry.granted_by_name ?? '—'}</td>
+                      <td style={{ padding: '6px 8px', color: '#888' }}>{new Date(entry.granted_at).toLocaleString()}</td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <button
+                          style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: '#fee', color: '#c0392b', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                          onClick={async () => {
+                            if (!confirm(`Revoke access for ${entry.address}?`)) return;
+                            try {
+                              await api.adminRevokeContractAcl(aclRegistryId, entry.address);
+                              const res = await api.adminGetContractAcl(aclRegistryId);
+                              setAclEntries(res.data ?? []);
+                              setAclMsg('Access revoked.');
+                            } catch (err) { setAclMsg(err.message); }
+                          }}
+                        >Revoke</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -290,4 +290,58 @@ router.patch('/farmers/:id/verify', async (req, res) => {
   res.json({ success: true, message: `Farmer ${status}` });
 });
 
+// ── Contract ACL ──────────────────────────────────────────────────────────
+
+const STELLAR_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
+
+// GET /api/admin/contracts/:id/acl
+router.get('/contracts/:id/acl', async (req, res) => {
+  const { rows: reg } = await db.query('SELECT id FROM contracts_registry WHERE id = $1', [req.params.id]);
+  if (!reg[0]) return res.status(404).json({ success: false, error: 'Contract not found' });
+  const { rows } = await db.query(
+    `SELECT ca.id, ca.contract_id, ca.address, ca.role, ca.granted_at,
+            u.name AS granted_by_name
+     FROM contract_acl ca
+     LEFT JOIN users u ON ca.granted_by = u.id
+     WHERE ca.contract_id = (SELECT contract_id FROM contracts_registry WHERE id = $1)
+     ORDER BY ca.granted_at DESC`,
+    [req.params.id]
+  );
+  res.json({ success: true, data: rows });
+});
+
+// POST /api/admin/contracts/:id/acl
+router.post('/contracts/:id/acl', async (req, res) => {
+  const { address, role = 'admin' } = req.body;
+  if (!address || !STELLAR_ADDRESS_RE.test(address)) {
+    return res.status(400).json({ success: false, error: 'Invalid Stellar address', code: 'invalid_address' });
+  }
+  const { rows: reg } = await db.query('SELECT contract_id FROM contracts_registry WHERE id = $1', [req.params.id]);
+  if (!reg[0]) return res.status(404).json({ success: false, error: 'Contract not found' });
+  try {
+    const { rows } = await db.query(
+      'INSERT INTO contract_acl (contract_id, address, role, granted_by) VALUES ($1,$2,$3,$4) RETURNING *',
+      [reg[0].contract_id, address, role, req.user.id]
+    );
+    res.status(201).json({ success: true, data: rows[0] });
+  } catch (e) {
+    if (e.code === '23505' || (e.message && e.message.includes('UNIQUE'))) {
+      return res.status(409).json({ success: false, error: 'Address already in ACL', code: 'duplicate' });
+    }
+    throw e;
+  }
+});
+
+// DELETE /api/admin/contracts/:id/acl/:address
+router.delete('/contracts/:id/acl/:address', async (req, res) => {
+  const { rows: reg } = await db.query('SELECT contract_id FROM contracts_registry WHERE id = $1', [req.params.id]);
+  if (!reg[0]) return res.status(404).json({ success: false, error: 'Contract not found' });
+  const { rowCount } = await db.query(
+    'DELETE FROM contract_acl WHERE contract_id = $1 AND address = $2',
+    [reg[0].contract_id, req.params.address]
+  );
+  if (!rowCount) return res.status(404).json({ success: false, error: 'ACL entry not found' });
+  res.json({ success: true, message: 'Access revoked' });
+});
+
 module.exports = router;
