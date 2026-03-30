@@ -27,6 +27,8 @@ const EMPTY_FORM = {
   quantity: '',
   unit: 'kg',
   category: 'other',
+  pricing_model: 'fixed',
+  min_price: '',
   is_preorder: false,
   preorder_delivery_date: '',
   allergens: [],
@@ -173,48 +175,6 @@ export default function Dashboard() {
     setGalleryErr('');
   }
 
-  async function handleGalleryUpload(e) {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (!files.length) return;
-    const invalid = files.find(f => !ALLOWED_TYPES.includes(f.type) || f.size > MAX_SIZE_BYTES);
-    if (invalid) return setGalleryErr('Only JPEG/PNG/WebP up to 5 MB each.');
-    if (galleryImages.length + files.length > MAX_IMAGES)
-      return setGalleryErr(`Max ${MAX_IMAGES} images. You have ${galleryImages.length}.`);
-    setGalleryUploading(true);
-    setGalleryErr('');
-    try {
-      const res = await api.uploadProductImages(galleryProductId, files);
-      setGalleryImages(res.data ?? []);
-      load();
-    } catch (e) { setGalleryErr(e.message); }
-    setGalleryUploading(false);
-  }
-
-  async function handleGalleryDelete(imgId) {
-    if (!confirm(t('dashboard.deleteImageConfirm'))) return;
-    try {
-      await api.deleteProductImage(galleryProductId, imgId);
-      const res = await api.getProductImages(galleryProductId);
-      setGalleryImages(res.data ?? []);
-      load();
-    } catch (e) { setGalleryErr(e.message); }
-  }
-
-  async function handleGalleryMove(index, dir) {
-    const imgs = [...galleryImages];
-    const swapIdx = index + dir;
-    if (swapIdx < 0 || swapIdx >= imgs.length) return;
-    [imgs[index], imgs[swapIdx]] = [imgs[swapIdx], imgs[index]];
-    const order = imgs.map((img, i) => ({ id: img.id, sort_order: i }));
-    try {
-      const res = await api.reorderProductImages(galleryProductId, order);
-      setGalleryImages(res.data ?? imgs);
-      load();
-    } catch (e) { setGalleryErr(e.message); }
-  }
-
-
   async function handleVideoUpload(productId, file) {
     if (!file) return;
     if (file.type !== 'video/mp4') {
@@ -236,86 +196,32 @@ export default function Dashboard() {
       setVideoUploadingByProduct((prev) => ({ ...prev, [productId]: false }));
     }
   }
-  async function load() {
-    try { setProducts(await api.getMyProducts()); } catch { /* ignore */ }
-  }
-
-  useEffect(() => { load(); }, []);
-  function closeGallery() {
-    setGalleryProductId(null);
-    setGalleryImages([]);
-    setGalleryErr('');
-  }
-
-  async function handleGalleryUpload(e) {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (!files.length) return;
-    const invalid = files.find(f => !ALLOWED_TYPES.includes(f.type) || f.size > MAX_SIZE_BYTES);
-    if (invalid) return setGalleryErr('Only JPEG/PNG/WebP up to 5 MB each.');
-    if (galleryImages.length + files.length > MAX_IMAGES)
-      return setGalleryErr(`Max ${MAX_IMAGES} images. You have ${galleryImages.length}.`);
-    setGalleryUploading(true);
-    setGalleryErr('');
-    try {
-      const res = await api.uploadProductImages(galleryProductId, files);
-      setGalleryImages(res.data ?? []);
-      load();
-    } catch (e) { setGalleryErr(e.message); }
-    setGalleryUploading(false);
-  }
-
-  async function handleGalleryDelete(imgId) {
-    if (!confirm(t('dashboard.deleteImageConfirm'))) return;
-    try {
-      await api.deleteProductImage(galleryProductId, imgId);
-      const res = await api.getProductImages(galleryProductId);
-      setGalleryImages(res.data ?? []);
-      load();
-    } catch (e) { setGalleryErr(e.message); }
-  }
-
-  async function handleGalleryMove(index, dir) {
-    const imgs = [...galleryImages];
-    const swapIdx = index + dir;
-    if (swapIdx < 0 || swapIdx >= imgs.length) return;
-    [imgs[index], imgs[swapIdx]] = [imgs[swapIdx], imgs[index]];
-    const order = imgs.map((img, i) => ({ id: img.id, sort_order: i }));
-    try {
-      const res = await api.reorderProductImages(galleryProductId, order);
-      setGalleryImages(res.data ?? imgs);
-      load();
-    } catch (e) { setGalleryErr(e.message); }
-  }
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [productsRes, salesRes, profileRes, bundlesRes, forecastRes] = await Promise.all([
-      const [productsRes, salesRes, profileRes, bundlesRes, couponsRes] = await Promise.all([
-      const [productsRes, salesRes, profileRes, bundlesRes, couponsRes, coopsRes] = await Promise.all([
+      const [productsRes, salesRes, profileRes, bundlesRes, couponsRes, coopsRes, forecastRes] = await Promise.all([
         api.getMyProducts().catch(() => ({ data: [] })),
         api.getSales().catch(() => ({ data: [] })),
         user?.id ? api.getFarmer(user.id).catch(() => ({})) : Promise.resolve({}),
         api.getBundles().catch(() => ({ data: [] })),
-        api.getForecast().catch(() => ({ data: [] })),
         api.getMyCoupons().catch(() => ({ data: [] })),
         api.getCooperatives().catch(() => ({ data: [] })),
+        api.getForecast().catch(() => ({ data: [] })),
       ]);
 
       setProducts(productsRes.data ?? productsRes);
       setSales(salesRes.data ?? salesRes);
       setBundles((bundlesRes.data ?? []).filter(b => b.farmer_id === user?.id));
+      setCoupons(couponsRes.data ?? []);
+      setCooperatives(coopsRes.data ?? []);
 
       const forecastMap = {};
       (forecastRes.data ?? []).forEach((item) => {
         forecastMap[item.product_id] = item;
       });
       setForecastByProduct(forecastMap);
-      setCoupons(couponsRes.data ?? []);
-      const coops = coopsRes.data ?? [];
-      setCooperatives(coops);
 
       // Load pending transactions for all cooperatives
       const allPending = await Promise.all(
@@ -425,10 +331,23 @@ export default function Dashboard() {
   async function handleAdd(e) {
     e.preventDefault();
     setMsg(null);
+    setFormErrors({});
+    let finalImageUrl = imageUrl;
+
+    if (imageFile) {
+      setUploading(true);
+      try {
+        const res = await api.uploadImage(imageFile);
+        finalImageUrl = res.imageUrl;
+      } catch (err) {
+        setUploading(false);
+        setMsg({ type: 'err', text: `Image upload failed: ${err.message}` });
+        return;
+      }
+      setUploading(false);
+    }
+
     try {
-      await api.createProduct({ ...form, price: parseFloat(form.price), quantity: parseInt(form.quantity) });
-      setMsg({ type: 'ok', text: 'Product listed successfully' });
-      setForm({ name: '', description: '', price: '', quantity: '', unit: 'kg', category: 'other' });
       // Prepare nutrition data
       const nutritionData = {};
       if (form.nutrition.calories) nutritionData.calories = parseFloat(form.nutrition.calories);
@@ -436,12 +355,13 @@ export default function Dashboard() {
       if (form.nutrition.carbs) nutritionData.carbs = parseFloat(form.nutrition.carbs);
       if (form.nutrition.fat) nutritionData.fat = parseFloat(form.nutrition.fat);
       if (form.nutrition.fiber) nutritionData.fiber = parseFloat(form.nutrition.fiber);
-      // Vitamins can be added later if needed
 
       await api.createProduct({
         ...form,
         price: parseFloat(form.price),
         quantity: parseInt(form.quantity),
+        pricing_model: form.pricing_model,
+        min_price: form.pricing_model === 'pwyw' ? parseFloat(form.min_price) : undefined,
         is_preorder: form.is_preorder ? 1 : 0,
         preorder_delivery_date: form.is_preorder ? form.preorder_delivery_date : null,
         image_url: finalImageUrl || undefined,
@@ -578,6 +498,21 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+            <label style={s.label}>Pricing Model</label>
+            <select style={s.input} value={form.pricing_model || 'fixed'} onChange={e => setForm({ ...form, pricing_model: e.target.value, min_price: e.target.value === 'pwyw' ? (form.min_price || '') : '' })}>
+              <option value="fixed">Fixed Price</option>
+              <option value="pwyw">Pay What You Want</option>
+              <option value="donation">Donation</option>
+            </select>
+            {form.pricing_model === 'pwyw' && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={s.label}>Minimum Price (XLM)</label>
+                <input style={s.input} type="number" min="0" step="any" value={form.min_price} onChange={e => setForm({ ...form, min_price: e.target.value })} placeholder="e.g. 5" required />
+              </div>
+            )}
+            <button style={{ ...s.btn, width: '100%', marginTop: 8 }} type="submit" disabled={uploading}>
+              {uploading ? t('dashboard.uploading') : t('dashboard.listProduct')}
+            </button>
 
             {/* Allergen selector */}
             <div style={{ marginBottom: 12 }}>
@@ -832,7 +767,9 @@ export default function Dashboard() {
                   }
                   <div>
                     <div style={{ fontWeight: 600 }}>{p.name}</div>
-                    <div style={{ fontSize: 13, color: '#666' }}>{p.price} XLM · {p.quantity} {p.unit}</div>
+                    <div style={{ fontSize: 13, color: '#666' }}>
+                      {p.pricing_model === 'pwyw' ? `Min ${p.min_price} XLM (PWYW)` : p.pricing_model === 'donation' ? 'Donation' : `${p.price} XLM`} · {p.quantity} {p.unit}
+                    </div>
                     {forecastByProduct[p.id]?.note ? (
                       <div style={{ fontSize: 12, color: '#888' }}>{forecastByProduct[p.id].note}</div>
                     ) : forecastByProduct[p.id] ? (
@@ -840,11 +777,6 @@ export default function Dashboard() {
                         Demand hint: {forecastByProduct[p.id].avg_weekly_sales} units/week {' '}
                         {forecastByProduct[p.id].trend === 'up' ? '↑' : forecastByProduct[p.id].trend === 'down' ? '↓' : '→'}
                       </div>
-                    ) : null}
-                    {p.video_url ? (
-                      <a href={p.video_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#2d6a4f' }}>
-                        View video
-                      </a>
                     ) : null}
                   </div>
                 </div>

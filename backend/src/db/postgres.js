@@ -26,4 +26,11 @@ async function getClient() {
   return pool.connect();
 }
 
-module.exports = { query, getClient, pool };
+/**
+ * Execute raw SQL (used by migration runner).
+ */
+async function exec(sql) {
+  return pool.query(sql);
+}
+
+module.exports = { query, getClient, exec, pool, isPostgres: true };

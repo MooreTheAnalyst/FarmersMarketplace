@@ -58,6 +58,51 @@ module.exports = {
     })
   ),
 
+  product: validate(z.object({
+    name: z.string().min(1, 'name is required').trim(),
+    price: z.coerce.number().positive('price must be a positive number'),
+    quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
+    unit: z.string().trim().optional(),
+    description: z.string().optional(),
+    category: z.string().optional(),
+    low_stock_threshold: z.coerce.number().int().nonnegative().optional(),
+    image_url: z.string().optional().or(z.literal('')),
+    tags: z.array(z.string()).optional(),
+    nutrition: z.object({
+      calories: z.coerce.number().nonnegative('calories must be non-negative').optional(),
+      protein: z.coerce.number().nonnegative('protein must be non-negative').optional(),
+      carbs: z.coerce.number().nonnegative('carbs must be non-negative').optional(),
+      fat: z.coerce.number().nonnegative('fat must be non-negative').optional(),
+      fiber: z.coerce.number().nonnegative('fiber must be non-negative').optional(),
+      vitamins: z.record(z.coerce.number().nonnegative('vitamin values must be non-negative')).optional(),
+    }).optional(),
+    pricing_type: z.enum(['unit', 'weight']).optional(),
+    min_weight: z.coerce.number().positive('min_weight must be positive').optional(),
+    max_weight: z.coerce.number().positive('max_weight must be positive').optional(),
+    pricing_model: z.enum(['fixed', 'pwyw', 'donation']).default('fixed'),
+    min_price: z.coerce.number().nonnegative('min_price must be non-negative').optional(),
+  }).refine(d => {
+    if (d.pricing_type === 'weight') {
+      if (!d.min_weight || !d.max_weight) return false;
+      if (d.min_weight >= d.max_weight) return false;
+    }
+    if (d.pricing_model === 'pwyw' && d.min_price === undefined) return false;
+    return true;
+  }, { message: 'Incomplete pricing configuration: weight-based requires min<max, and PWYW requires min_price' })),
+
+  order: validate(z.object({
+    product_id: z.coerce.number().int().positive('product_id must be a positive integer'),
+    quantity: z.coerce.number().int().positive('quantity must be a positive integer'),
+    address_id: z.coerce.number().int().positive().optional(),
+    use_soroban_escrow: z.coerce.boolean().optional(),
+    weight: z.coerce.number().positive('weight must be a positive number').optional(),
+    custom_price: z.coerce.number().positive('custom_price must be a positive number').optional(),
+    coupon_code: z.string().optional(),
+    source_asset: z.object({
+      code: z.string(),
+      issuer: z.string().optional(),
+    }).optional(),
+  })),
   product: validate(
     z
       .object({
