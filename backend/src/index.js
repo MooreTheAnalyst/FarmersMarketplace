@@ -3,12 +3,14 @@ const app = require('./app');
 const logger = require('./logger');
 const cron = require('node-cron');
 const { startSubscriptionJob } = require('./jobs/processSubscriptions');
+const { startFreshnessJob } = require('./jobs/processFreshnessAlerts');
 const { createBackup } = require('./scripts/backup');
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
   logger.info(`Backend running on http://localhost:${PORT}`);
   startSubscriptionJob();
+  startFreshnessJob();
   
   // Schedule daily backup at midnight
   cron.schedule('0 0 * * *', async () => {

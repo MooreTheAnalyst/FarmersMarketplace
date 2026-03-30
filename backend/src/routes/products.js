@@ -63,6 +63,8 @@ router.get('/', async (req, res) => {
   const params = [];
 
   if (available === 'true') conditions.push('p.quantity > 0');
+  conditions.push('(p.best_before IS NULL OR p.best_before >= date(\'now\'))');
+
   if (category) {
     conditions.push(`p.category = $${params.length + 1}`);
     params.push(category);
@@ -109,6 +111,7 @@ router.get('/', async (req, res) => {
   const params = [];
 
   if (available === 'true') conditions.push('p.quantity > 0');
+  conditions.push(`p.best_before IS NULL OR p.best_before >= CURRENT_DATE`);
   if (category)   { conditions.push(`p.category = $${params.length + 1}`);        params.push(category); }
   if (minPrice !== undefined) { const min = parseFloat(minPrice); if (!isNaN(min)) { conditions.push(`p.price >= $${params.length + 1}`); params.push(min); } }
   if (maxPrice !== undefined) { const max = parseFloat(maxPrice); if (!isNaN(max)) { conditions.push(`p.price <= $${params.length + 1}`); params.push(max); } }
@@ -539,6 +542,8 @@ router.post('/', auth, validate.product, (req, res) => {
     quantity,
     safeUnit,
     safeImageUrl,
+    harvest_date || null,
+    best_before || null,
     preorder.isPreorder ? 1 : 0,
     preorder.preorderDeliveryDate,
     parseInt(req.body.low_stock_threshold, 10) || 5,

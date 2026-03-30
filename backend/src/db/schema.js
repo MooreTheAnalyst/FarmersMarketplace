@@ -131,6 +131,8 @@ if (USE_POSTGRES) {
       quantity INTEGER NOT NULL,
       unit TEXT DEFAULT 'unit',
       image_url TEXT,
+      harvest_date DATE,
+      best_before DATE,
       pricing_model TEXT DEFAULT 'fixed',
       min_price REAL,
       is_preorder INTEGER DEFAULT 0,
@@ -147,6 +149,40 @@ if (USE_POSTGRES) {
       FOREIGN KEY (farmer_id) REFERENCES users(id)
     );
 
+// Migrate existing DB: add columns if missing
+try { db.exec(`ALTER TABLE products ADD COLUMN category TEXT DEFAULT 'other'`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN image_url TEXT`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN is_preorder INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN preorder_delivery_date TEXT`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN harvest_date DATE`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN best_before DATE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1`); } catch {}
+// Allow admin role — SQLite doesn't support ALTER COLUMN, so we handle it in auth logic
+try { db.exec(`ALTER TABLE users ADD COLUMN bio TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN location TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN federation_name TEXT UNIQUE`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referred_by INTEGER REFERENCES users(id)`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN referral_bonus_sent INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE users ADD COLUMN stellar_mnemonic TEXT`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 5`); } catch {}
+try { db.exec(`ALTER TABLE products ADD COLUMN low_stock_alerted INTEGER DEFAULT 0`); } catch {}
+  module.exports = pg;
+
+} else {
+  const Database = require('better-sqlite3');
+  const path     = require('path');
+
+  let sqlite;
+  try {
+    sqlite = new Database(path.join(__dirname, '../../market.db'));
+  } catch (err) {
+    console.error('[DB] Failed to open SQLite database:', err.message);
+    process.exit(1);
+  }
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       buyer_id INTEGER NOT NULL,
