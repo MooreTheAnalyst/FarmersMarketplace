@@ -349,4 +349,11 @@ export const api = {
   // Account alerts
   getAlerts: () => request('/wallet/alerts'),
   markAlertRead: (id) => request(`/wallet/alerts/${id}/read`, { method: 'PATCH' }),
+
+  // Announcements
+  getAnnouncements: () => request('/announcements'),
+  adminGetAnnouncements: () => request('/announcements/admin'),
+  adminCreateAnnouncement: (body) => request('/announcements/admin', { method: 'POST', body }),
+  adminUpdateAnnouncement: (id, body) => request(`/announcements/admin/${id}`, { method: 'PATCH', body }),
+  adminDeleteAnnouncement: (id) => request(`/announcements/admin/${id}`, { method: 'DELETE' }),
 };

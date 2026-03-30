@@ -7,6 +7,7 @@ import { LoadingProvider, LoadingContext } from './context/LoadingContext';
 import { setLoadingCallback, setLogoutCallback } from './api/client';
 import ErrorBoundary from './components/ErrorBoundary';
 import Navbar from './components/Navbar';
+import AnnouncementBanner from './components/AnnouncementBanner';
 import LoadingSpinner from './components/LoadingSpinner';
 import PageLoader from './components/PageLoader';
 
@@ -59,6 +60,7 @@ function AppContent() {
 
   return (
     <>
+      <AnnouncementBanner />
       <Navbar />
       <LoadingSpinner />
       <main id="main-content" style={{ paddingTop: 24 }}>

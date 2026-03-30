@@ -467,4 +467,6 @@ router.use('/api/messages', require('./messages'));
 
 router.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 
+router.use('/api/announcements', require('./announcements'));
+
 module.exports = router;
