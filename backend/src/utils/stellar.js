@@ -387,6 +387,90 @@ async function getContractState(contractId, prefix = null) {
 }
 
 /**
+ * Current WASM bytecode hash for a Soroban contract (ledger contract instance entry).
+ * @param {string} contractId Contract address (C… or 64-char hex)
+ * @returns {Promise<string>} 64-char lowercase hex
+ */
+async function getContractWasmHash(contractId) {
+  const sorobanRpcUrl =
+    process.env.SOROBAN_RPC_URL ||
+    (isTestnet
+      ? "https://soroban-testnet.stellar.org"
+      : "https://soroban.stellar.org");
+  const sorobanServer = new StellarSdk.SorobanRpc.Server(sorobanRpcUrl);
+  const contractAddress = new StellarSdk.Address(contractId);
+  const ledgerKey = StellarSdk.xdr.LedgerKey.contractData(
+    new StellarSdk.xdr.LedgerKeyContractData({
+      contract: contractAddress.toScAddress(),
+      key: StellarSdk.xdr.ScVal.scvLedgerKeyContractInstance(),
+      durability: StellarSdk.xdr.ContractDataDurability.persistent(),
+    }),
+  );
+
+  let response;
+  try {
+    response = await sorobanServer.getLedgerEntries(ledgerKey);
+  } catch (e) {
+    if (e.message?.includes("not found") || e.code === 404) {
+      const notFound = new Error("Contract not found");
+      notFound.code = 404;
+      throw notFound;
+    }
+    throw e;
+  }
+
+  const list = response.entries || [];
+  if (!list.length) {
+    const notFound = new Error("Contract instance not found on ledger");
+    notFound.code = 404;
+    throw notFound;
+  }
+
+  const entry = list[0];
+  const data = entry.val?.contractData?.();
+  if (!data) {
+    const err = new Error("Unexpected ledger entry shape");
+    err.code = "parse_error";
+    throw err;
+  }
+
+  const scVal = data.val();
+  let instance;
+  try {
+    instance = scVal.contractInstance();
+  } catch {
+    const err = new Error("Contract data is not a contract instance");
+    err.code = "parse_error";
+    throw err;
+  }
+
+  const exec = instance.executable();
+  const sw = exec.switch();
+  const wasmArm = StellarSdk.xdr.ContractExecutableType.contractExecutableWasm();
+  const isWasm =
+    sw === wasmArm || sw?.name === wasmArm?.name || String(sw).includes("Wasm");
+  if (!isWasm) {
+    const err = new Error("Contract executable is not WASM");
+    err.code = "not_wasm_contract";
+    throw err;
+  }
+
+  const raw =
+    typeof exec.wasmHash === "function"
+      ? exec.wasmHash()
+      : typeof exec.value === "function"
+        ? exec.value()
+        : null;
+  if (!raw) {
+    const err = new Error("SDK cannot read WASM hash from executable");
+    err.code = "parse_error";
+    throw err;
+  }
+
+  return Buffer.from(raw).toString("hex").toLowerCase();
+}
+
+/**
  * Build an InvokeHostFunction tx and run Soroban RPC simulateTransaction only (never submits).
  * @param {string} contractId Contract address (C… or 64-char hex)
  * @param {string} method Soroban contract function name
@@ -932,6 +1016,7 @@ module.exports = {
   claimBalance,
   invokeEscrowContract,
   getContractState,
+  getContractWasmHash,
   simulateContractCall,
   getContractEvents,
   resolveFederationAddress,

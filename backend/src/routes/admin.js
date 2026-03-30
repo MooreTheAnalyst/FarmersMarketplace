@@ -2,6 +2,16 @@ const router = require('express').Router();
 const db = require('../db/schema');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
+const { getContractWasmHash } = require('../utils/stellar');
+
+const STELLAR_NETWORK = (process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
+
+function normalizeWasmHash(h) {
+  if (h == null || typeof h !== 'string') return null;
+  const x = h.trim().toLowerCase().replace(/^0x/, '');
+  if (!/^[0-9a-f]{64}$/.test(x)) return null;
+  return x;
+}
 
 router.use(auth, adminAuth);
 
@@ -129,6 +139,101 @@ router.delete('/contracts/:id', async (req, res) => {
   ]);
   if (!rowCount) return res.status(404).json({ success: false, error: 'Contract not found' });
   res.json({ success: true, message: 'Contract deregistered' });
+});
+
+// GET /api/admin/contracts/:id/upgrades — immutable audit trail (newest first)
+router.get('/contracts/:id/upgrades', async (req, res) => {
+  const registryId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(registryId)) {
+    return res.status(400).json({ success: false, error: 'Invalid contract registry id' });
+  }
+  const { rows: reg } = await db.query('SELECT id, contract_id FROM contracts_registry WHERE id = $1', [registryId]);
+  if (!reg[0]) {
+    return res.status(404).json({ success: false, error: 'Contract not found' });
+  }
+  const { rows } = await db.query(
+    `SELECT cu.id, cu.contract_id, cu.old_wasm_hash, cu.new_wasm_hash, cu.upgraded_at,
+            u.name AS upgraded_by_name, cu.upgraded_by
+     FROM contract_upgrades cu
+     LEFT JOIN users u ON cu.upgraded_by = u.id
+     WHERE cu.contract_id = $1
+     ORDER BY cu.upgraded_at DESC, cu.id DESC`,
+    [reg[0].contract_id],
+  );
+  res.json({ success: true, data: rows });
+});
+
+// POST /api/admin/contracts/:id/upgrade — record upgrade (new WASM hash verified on Soroban RPC)
+router.post('/contracts/:id/upgrade', async (req, res) => {
+  const registryId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(registryId)) {
+    return res.status(400).json({ success: false, error: 'Invalid contract registry id' });
+  }
+  const oldH = normalizeWasmHash(req.body?.old_wasm_hash);
+  const newH = normalizeWasmHash(req.body?.new_wasm_hash);
+  if (!oldH || !newH) {
+    return res.status(400).json({
+      success: false,
+      error: 'old_wasm_hash and new_wasm_hash must be 64-character hex strings',
+    });
+  }
+
+  const { rows } = await db.query(
+    'SELECT id, contract_id, network FROM contracts_registry WHERE id = $1',
+    [registryId],
+  );
+  if (!rows[0]) {
+    return res.status(404).json({ success: false, error: 'Contract not found' });
+  }
+  const row = rows[0];
+  if (row.network !== STELLAR_NETWORK) {
+    return res.status(400).json({
+      success: false,
+      error: `Contract network (${row.network}) does not match server STELLAR_NETWORK (${STELLAR_NETWORK})`,
+    });
+  }
+
+  let chainNew;
+  try {
+    chainNew = await getContractWasmHash(row.contract_id);
+  } catch (e) {
+    if (e.code === 404) {
+      return res.status(502).json({
+        success: false,
+        error: 'Could not load contract from Soroban RPC',
+        code: 'rpc_not_found',
+      });
+    }
+    return res.status(502).json({
+      success: false,
+      error: e.message || 'Soroban RPC failed',
+      code: 'rpc_error',
+    });
+  }
+
+  if (chainNew !== newH) {
+    return res.status(400).json({
+      success: false,
+      error: 'new_wasm_hash does not match the WASM hash reported by Soroban RPC for this contract',
+      code: 'wasm_hash_mismatch',
+      expected: chainNew,
+    });
+  }
+
+  try {
+    const ins = await db.query(
+      `INSERT INTO contract_upgrades (contract_id, old_wasm_hash, new_wasm_hash, upgraded_by)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, contract_id, old_wasm_hash, new_wasm_hash, upgraded_by, upgraded_at`,
+      [row.contract_id, oldH, newH, req.user.id],
+    );
+    res.status(201).json({ success: true, data: ins.rows[0] });
+  } catch (e) {
+    if (e.code === '23503' || (e.message && e.message.includes('FOREIGN KEY'))) {
+      return res.status(400).json({ success: false, error: 'Invalid contract or user reference' });
+    }
+    throw e;
+  }
 });
 
 // GET /api/admin/farmers/pending - Get farmers pending verification

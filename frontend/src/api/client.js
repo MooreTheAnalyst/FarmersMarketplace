@@ -225,6 +225,9 @@ export const api = {
   adminGetContracts: (qs = '') => request(`/admin/contracts${qs}`),
   adminRegisterContract: (body) => request('/admin/contracts', { method: 'POST', body }),
   adminDeregisterContract: (id) => request(`/admin/contracts/${id}`, { method: 'DELETE' }),
+  adminGetContractUpgrades: (registryId) => request(`/admin/contracts/${registryId}/upgrades`),
+  adminRecordContractUpgrade: (registryId, body) =>
+    request(`/admin/contracts/${registryId}/upgrade`, { method: 'POST', body }),
 
   getAddresses: () => request('/addresses'),
 

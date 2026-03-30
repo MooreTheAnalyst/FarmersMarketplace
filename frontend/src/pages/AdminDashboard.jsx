@@ -50,6 +50,14 @@ export default function AdminDashboard() {
   const [simFormError, setSimFormError] = useState('');
   const [simOutcome, setSimOutcome] = useState(null);
 
+  const [selectedRegistryId, setSelectedRegistryId] = useState(null);
+  const [contractUpgrades, setContractUpgrades] = useState([]);
+  const [upgradeDetailLoading, setUpgradeDetailLoading] = useState(false);
+  const [upgradeDetailError, setUpgradeDetailError] = useState('');
+  const [upgradeForm, setUpgradeForm] = useState({ old_wasm_hash: '', new_wasm_hash: '' });
+  const [upgradeSubmitBusy, setUpgradeSubmitBusy] = useState(false);
+  const [upgradeSubmitMsg, setUpgradeSubmitMsg] = useState('');
+
   const inputStyle = { padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 };
   const monoInputStyle = { ...inputStyle, fontFamily: 'monospace' };
   // Contract event log
@@ -129,6 +137,45 @@ export default function AdminDashboard() {
       setContractError(e.message);
     } finally {
       setContractLoading(false);
+    }
+  }
+
+  async function loadContractUpgrades(registryId) {
+    setUpgradeDetailError('');
+    setUpgradeDetailLoading(true);
+    try {
+      const res = await api.adminGetContractUpgrades(registryId);
+      setContractUpgrades(res.data ?? []);
+    } catch (e) {
+      setUpgradeDetailError(e.message);
+      setContractUpgrades([]);
+    } finally {
+      setUpgradeDetailLoading(false);
+    }
+  }
+
+  function openContractDetail(c) {
+    setSelectedRegistryId(c.id);
+    setUpgradeForm({ old_wasm_hash: '', new_wasm_hash: '' });
+    setUpgradeSubmitMsg('');
+    setUpgradeDetailError('');
+    loadContractUpgrades(c.id);
+  }
+
+  async function handleRecordUpgrade(e) {
+    e.preventDefault();
+    if (!selectedRegistryId) return;
+    setUpgradeSubmitMsg('');
+    setUpgradeSubmitBusy(true);
+    try {
+      await api.adminRecordContractUpgrade(selectedRegistryId, upgradeForm);
+      setUpgradeForm({ old_wasm_hash: '', new_wasm_hash: '' });
+      setUpgradeSubmitMsg('Upgrade recorded.');
+      await loadContractUpgrades(selectedRegistryId);
+    } catch (err) {
+      setUpgradeSubmitMsg(err.message || 'Failed to record upgrade');
+    } finally {
+      setUpgradeSubmitBusy(false);
     }
   }
 
@@ -331,6 +378,18 @@ export default function AdminDashboard() {
                       >Simulate</button>
                       <button
                         type="button"
+                        onClick={() => openContractDetail(c)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          border: selectedRegistryId === c.id ? '2px solid #2d6a4f' : '1px solid #ccc',
+                          background: selectedRegistryId === c.id ? '#e8f5e9' : '#fff',
+                          fontSize: 12,
+                          cursor: 'pointer',
+                        }}
+                      >Details</button>
+                      <button
+                        type="button"
                         onClick={() => handleDeregisterContract(c.id)}
                         style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', fontSize: 12, cursor: 'pointer' }}
                       >Deregister</button>
@@ -340,6 +399,93 @@ export default function AdminDashboard() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {selectedRegistryId != null && (
+          <div style={{ marginTop: 24, padding: 16, borderRadius: 10, border: '1px solid #e0e0e0', background: '#fafafa' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <h4 style={{ margin: 0, color: '#333' }}>
+                Contract #{selectedRegistryId}
+                {contracts.find((x) => x.id === selectedRegistryId)?.name
+                  ? ` — ${contracts.find((x) => x.id === selectedRegistryId).name}`
+                  : ''}
+                <span style={{ fontWeight: 400, fontSize: 13, color: '#666', marginLeft: 8 }}>WASM upgrade history</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => { setSelectedRegistryId(null); setContractUpgrades([]); setUpgradeSubmitMsg(''); setUpgradeDetailError(''); }}
+                style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', fontSize: 12, cursor: 'pointer' }}
+              >Close</button>
+            </div>
+            <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+              Each row is immutable. <code style={{ fontSize: 11 }}>new_wasm_hash</code> must match the hash Soroban RPC reports for the contract after upgrade.
+            </p>
+            {upgradeDetailError && <div style={s.err}>{upgradeDetailError}</div>}
+            {upgradeDetailLoading ? (
+              <div style={{ color: '#666', fontSize: 14 }}>Loading history…</div>
+            ) : contractUpgrades.length === 0 ? (
+              <div style={{ color: '#888', fontSize: 14, marginBottom: 16 }}>No upgrades recorded yet.</div>
+            ) : (
+              <table style={{ ...s.table, marginBottom: 20 }}>
+                <thead>
+                  <tr>
+                    <th style={s.th}>When</th>
+                    <th style={s.th}>Old WASM hash</th>
+                    <th style={s.th}>New WASM hash</th>
+                    <th style={s.th}>Recorded by</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contractUpgrades.map((u) => (
+                    <tr key={u.id}>
+                      <td style={s.td}>{u.upgraded_at ? new Date(u.upgraded_at).toLocaleString() : '—'}</td>
+                      <td style={{ ...s.td, fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all' }}>{u.old_wasm_hash}</td>
+                      <td style={{ ...s.td, fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all' }}>{u.new_wasm_hash}</td>
+                      <td style={s.td}>{u.upgraded_by_name || `user #${u.upgraded_by}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div style={{ fontWeight: 600, marginBottom: 8, color: '#444' }}>Record upgrade</div>
+            <form onSubmit={handleRecordUpgrade} style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 560 }}>
+              <input
+                style={monoInputStyle}
+                placeholder="Previous WASM hash (64 hex chars)"
+                value={upgradeForm.old_wasm_hash}
+                onChange={(e) => setUpgradeForm((f) => ({ ...f, old_wasm_hash: e.target.value }))}
+                required
+              />
+              <input
+                style={monoInputStyle}
+                placeholder="New WASM hash — must match Soroban RPC (64 hex)"
+                value={upgradeForm.new_wasm_hash}
+                onChange={(e) => setUpgradeForm((f) => ({ ...f, new_wasm_hash: e.target.value }))}
+                required
+              />
+              {upgradeSubmitMsg && (
+                <div style={{
+                  fontSize: 13,
+                  color: upgradeSubmitMsg.includes('recorded') ? '#2d6a4f' : '#c0392b',
+                }}
+                >{upgradeSubmitMsg}</div>
+              )}
+              <button
+                type="submit"
+                disabled={upgradeSubmitBusy}
+                style={{
+                  alignSelf: 'flex-start',
+                  padding: '8px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#2d6a4f',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: upgradeSubmitBusy ? 'not-allowed' : 'pointer',
+                }}
+              >{upgradeSubmitBusy ? 'Saving…' : 'Save upgrade record'}</button>
+            </form>
+          </div>
         )}
 
         <h4 style={{ marginTop: 28, marginBottom: 12, color: '#444' }}>Simulate contract call</h4>
